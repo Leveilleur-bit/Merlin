@@ -26,6 +26,7 @@
   color-scheme:dark;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:15px;-webkit-font-smoothing:antialiased}
 body{padding-top:env(safe-area-inset-top,0px);padding-bottom:calc(68px + env(safe-area-inset-bottom,0px))}
 button,input,select,textarea{font:inherit;color:inherit}
@@ -120,6 +121,9 @@ dialog h3{margin:0;font-size:17px}
   <button type="button" class="sync" id="sync-status" aria-label="État de la connexion GitHub">Hors ligne</button>
   <button class="icon-btn" id="btn-refresh" aria-label="Actualiser les cours" title="Actualiser les cours">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>
+  </button>
+  <button class="icon-btn" id="btn-settings" aria-label="Réglages" title="Réglages">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
   </button>
 </header>
 
@@ -666,6 +670,7 @@ function verifyToken(tok){
 var changing=false;
 function openSettings(){changing=false;$('s-token').value='';$('s-confirm').value='';$('s-forget').disabled=true;$('s-zone').open=false;$('s-taux').value=D.reglages.taux_impot;paintState();$('dlg-set').showModal();}
 $('sync-status').addEventListener('click',openSettings);
+$('btn-settings').addEventListener('click',openSettings);
 $('gh-banner-btn').addEventListener('click',openSettings);
 $('s-change').addEventListener('click',function(){changing=true;paintState();$('s-token').focus();});
 $('s-cancel').addEventListener('click',function(){changing=false;$('s-token').value='';paintState();});
