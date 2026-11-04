@@ -145,9 +145,12 @@ dialog h3{margin:0;font-size:17px}
       </div>
     </div>
     <div class="card">
-      <h2>Évolution</h2>
-      <div id="spark"></div>
-      <p class="note">Un point par jour où tu ouvres l'appli.</p>
+      <div class="row" style="justify-content:space-between"><h2>Évolution</h2>
+        <div class="seg" id="ev-per" role="group" aria-label="Période"><button data-d="0" class="on">Tout</button><button data-d="365">1 A</button><button data-d="90">3 M</button></div></div>
+      <div class="row" style="gap:14px;font-size:12px"><span><i style="display:inline-block;width:14px;height:3px;background:#d9a441;vertical-align:middle;border-radius:2px"></i> Valeur</span><span class="dim"><i style="display:inline-block;width:14px;height:0;border-top:2px dashed #6b737e;vertical-align:middle"></i> Euros investis (net)</span></div>
+      <div id="spark" style="position:relative"></div>
+      <div class="rd num faint" id="ev-rd" style="font-size:12px;min-height:16px"></div>
+      <p class="note">Avant aujourd'hui : valeur estimée à partir de la courbe de gains de l'appli Crypto.com (approximative). Ensuite : un point par jour où tu ouvres Merlin.</p>
     </div>
     <div class="card">
       <div class="row" style="justify-content:space-between"><h2>Euro, or et argent</h2>
@@ -339,11 +342,11 @@ function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
 
 /* ---------- données ---------- */
 var DKEY='merlin_data',PKEY='merlin_prices',GKEY='merlin_gh';
-var EMPTY={version:1,reglages:{taux_impot:0.30,u:0},fiscal:{acquisitions:[],cessions:[]},positions:[],idees:[],journal:[],historique:[],deleted:{}};
+var EMPTY={version:1,reglages:{taux_impot:0.30,u:0},fiscal:{acquisitions:[],cessions:[]},positions:[],idees:[],journal:[],historique:[],historique_long:[],deleted:{}};
 var D=lsGet(DKEY,null)||JSON.parse(JSON.stringify(EMPTY));
 var PR=lsGet(PKEY,{ts:0,p:{}});
 function norm(d){d=d||{};var e=JSON.parse(JSON.stringify(EMPTY));
-  ['positions','idees','journal','historique'].forEach(function(k){e[k]=Array.isArray(d[k])?d[k]:[];});
+  ['positions','idees','journal','historique','historique_long'].forEach(function(k){e[k]=Array.isArray(d[k])?d[k]:[];});if(d.historique_long_source)e.historique_long_source=d.historique_long_source;
   e.fiscal.acquisitions=(d.fiscal&&d.fiscal.acquisitions)||[];e.fiscal.cessions=(d.fiscal&&d.fiscal.cessions)||[];
   e.reglages=Object.assign(e.reglages,d.reglages||{});e.deleted=d.deleted||{};e.version=d.version||1;e.maj=d.maj;return e;}
 D=norm(D);
@@ -402,14 +405,48 @@ function renderHome(){
   $('k-mult').textContent=t&&mise?'× '+((t+out)/mise).toFixed(1).replace('.',','):'—';
   var rs=rows().filter(function(r){return r.val>1;});var mx=rs.length?rs[0].val:1;
   $('compo').innerHTML=rs.map(function(r){return'<div class="bar"><span>'+esc(r.p.actif)+'</span><span class="num">'+eur(r.val)+' <span class="faint">· '+Math.round(r.val/t*100)+' %</span></span><span class="t"><i style="width:'+(r.val/mx*100)+'%"></i></span></div>';}).join('')||'<div class="empty">Aucune position. Connecte GitHub dans les réglages.</div>';
-  var h=D.historique.slice(-120);
-  if(h.length<2){$('spark').innerHTML='<div class="empty">La courbe apparaîtra après quelques jours d\'utilisation.</div>';}
-  else{var W=600,H=90,vs=h.map(function(x){return x.valeur_eur;}),mn=Math.min.apply(0,vs),mxv=Math.max.apply(0,vs),sp=mxv-mn||1;
-    var pts=h.map(function(x,i){return[(i/(h.length-1))*(W-8)+4,H-6-((x.valeur_eur-mn)/sp)*(H-16)];});
-    var d='M'+pts.map(function(p){return p[0].toFixed(1)+' '+p[1].toFixed(1);}).join(' L');
-    var last=pts[pts.length-1];
-    $('spark').innerHTML='<svg class="spark" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" role="img" aria-label="Évolution de la valeur"><path d="'+d+' L'+last[0]+' '+H+' L4 '+H+' Z" fill="rgba(217,164,65,.12)"/><path d="'+d+'" fill="none" stroke="#d9a441" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg><div class="row num faint" style="justify-content:space-between;font-size:12px"><span>'+esc(h[0].date)+' · '+eur(h[0].valeur_eur)+'</span><span>'+esc(h[h.length-1].date)+' · '+eur(h[h.length-1].valeur_eur)+'</span></div>';}
+  renderEvo();
 }
+var evDays=0,evPts=[];
+function netInvestedAt(date){var v=0;D.fiscal.acquisitions.forEach(function(a){if(a.date<=date)v+= +a.montant_eur;});D.fiscal.cessions.forEach(function(c){if(c.date<=date)v-= +c.montant_eur;});return v;}
+function evoSeries(){
+  var daily=D.historique.slice().sort(function(a,b){return a.date<b.date?-1:1;});
+  var first=daily.length?daily[0].date:'9999';
+  var L=D.historique_long.filter(function(g){return g.date<first;}).sort(function(a,b){return a.date<b.date?-1:1;});
+  /* Recalage : les gains Crypto.com sont mis à l'échelle pour rejoindre la première valeur réelle de Merlin */
+  var k=1;if(L.length&&daily.length){var gl=L[L.length-1].gain_eur,target=daily[0].valeur_eur-netInvestedAt(daily[0].date);if(gl>0&&target>0)k=target/gl;if(k<0.7||k>1.3)k=1;}
+  var pts=L.map(function(g){var n=netInvestedAt(g.date);return{date:g.date,val:Math.max(0,g.gain_eur*k+n),mise:n};});
+  daily.forEach(function(h){pts.push({date:h.date,val:h.valeur_eur,mise:netInvestedAt(h.date)});});
+  return pts;
+}
+function renderEvo(){
+  document.querySelectorAll('#ev-per button').forEach(function(b){b.classList.toggle('on',+b.dataset.d===evDays);});
+  var all=evoSeries();var from=evDays?new Date(Date.now()-evDays*864e5).toISOString().slice(0,10):'0';
+  var h=all.filter(function(p){return p.date>=from;});if(h.length<2)h=all.slice(-2);evPts=h;
+  if(h.length<2){$('spark').innerHTML='<div class="empty">La courbe apparaîtra après quelques jours d\'utilisation.</div>';$('ev-rd').textContent='';return;}
+  var W=600,H=150,t0=+new Date(h[0].date),t1=+new Date(h[h.length-1].date),ts=t1-t0||1;
+  var mx=Math.max.apply(0,h.map(function(p){return Math.max(p.val,p.mise);}))*1.05||1;
+  var X=function(d){return 4+(+new Date(d)-t0)/ts*(W-8);},Y=function(v){return H-4-v/mx*(H-10);};
+  var dv='M'+h.map(function(p){return X(p.date).toFixed(1)+' '+Y(p.val).toFixed(1);}).join(' L');
+  var dm='M'+h.map(function(p,i){var s=X(p.date).toFixed(1)+' '+Y(p.mise).toFixed(1);return i?'H'+X(p.date).toFixed(1)+' V'+Y(p.mise).toFixed(1):s;}).join(' ');
+  var grid=[0.25,0.5,0.75].map(function(f){var y=Y(mx*f/1.05);return'<line x1="0" x2="'+W+'" y1="'+y+'" y2="'+y+'" stroke="#232932" stroke-width="1" vector-effect="non-scaling-stroke"/>';}).join('');
+  $('spark').innerHTML='<svg class="spark" style="height:150px;touch-action:pan-y" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" role="img" aria-label="Évolution de la valeur et des euros investis">'+grid+
+    '<path d="'+dv+' L'+X(h[h.length-1].date)+' '+H+' L'+X(h[0].date)+' '+H+' Z" fill="rgba(217,164,65,.12)"/>'+
+    '<path d="'+dm+'" fill="none" stroke="#6b737e" stroke-width="1.5" stroke-dasharray="5 4" vector-effect="non-scaling-stroke"/>'+
+    '<path d="'+dv+'" fill="none" stroke="#d9a441" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>'+
+    '<line id="ev-cur" x1="0" x2="0" y1="0" y2="'+H+'" stroke="#9aa1ab" stroke-width="1" vector-effect="non-scaling-stroke" visibility="hidden"/></svg>'+
+    '<div class="row num faint" style="justify-content:space-between;font-size:12px"><span>'+esc(h[0].date.slice(0,7))+'</span><span>max '+eur(Math.max.apply(0,h.map(function(p){return p.val;})))+'</span><span>'+esc(h[h.length-1].date.slice(0,7))+'</span></div>';
+  evRead(null);
+}
+function evRead(p){var e=$('ev-rd');if(!p){var l=evPts[evPts.length-1];e.textContent=l?'Dernier point '+l.date+' · valeur '+eur(l.val)+' · investi '+eur(l.mise):'';return;}
+  e.textContent=p.date+' · valeur '+eur(p.val)+' · investi '+eur(p.mise)+' · '+sEur(p.val-p.mise);}
+function evMove(ev){var sv=$('spark').querySelector('svg');if(!sv||evPts.length<2)return;var r=sv.getBoundingClientRect(),x=Math.min(Math.max(0,(ev.clientX-r.left)/r.width),1);
+  var t0=+new Date(evPts[0].date),t1=+new Date(evPts[evPts.length-1].date),t=t0+x*(t1-t0),best=evPts[0];
+  evPts.forEach(function(p){if(Math.abs(+new Date(p.date)-t)<Math.abs(+new Date(best.date)-t))best=p;});
+  var X=4+(+new Date(best.date)-t0)/((t1-t0)||1)*592,ln=$('ev-cur');ln.setAttribute('x1',X);ln.setAttribute('x2',X);ln.setAttribute('visibility','visible');evRead(best);}
+$('spark').addEventListener('pointermove',evMove);$('spark').addEventListener('pointerdown',evMove);
+$('spark').addEventListener('pointerleave',function(){var ln=$('ev-cur');if(ln)ln.setAttribute('visibility','hidden');evRead(null);});
+$('ev-per').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;evDays=+b.dataset.d;renderEvo();});
 function renderPos(){
   $('pos-body').innerHTML=rows().map(function(r){var p=r.p;
     return'<tr class="click" data-id="'+esc(p.id)+'"><td><span class="asset">'+esc(p.actif)+'<small class="num">'+qty(p.quantite)+'</small></span></td>'+
@@ -562,7 +599,7 @@ function mergeArr(a,b){var m={};(b||[]).concat(a||[]).forEach(function(x){if(!x|
   return Object.keys(m).map(function(k){return m[k];}).filter(function(x){return!D.deleted[x.id];});}
 function merge(loc,rem){
   rem=norm(rem);Object.keys(rem.deleted).forEach(function(k){loc.deleted[k]=Math.max(loc.deleted[k]||0,rem.deleted[k]);});D.deleted=loc.deleted;
-  var o=norm(loc);['positions','idees','journal','historique'].forEach(function(k){o[k]=mergeArr(loc[k],rem[k]);});
+  var o=norm(loc);['positions','idees','journal','historique','historique_long'].forEach(function(k){o[k]=mergeArr(loc[k],rem[k]);});
   o.fiscal.acquisitions=mergeArr(loc.fiscal.acquisitions,rem.fiscal.acquisitions);o.fiscal.cessions=mergeArr(loc.fiscal.cessions,rem.fiscal.cessions);
   o.reglages=(rem.reglages.u||0)>(loc.reglages.u||0)?rem.reglages:loc.reglages;o.deleted=loc.deleted;return o;}
 function ghPull(silent){
