@@ -103,8 +103,8 @@ label.f textarea{min-height:90px;resize:vertical}
 .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .sim .out{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:rgba(7,13,10,.95);backdrop-filter:blur(8px);border-top:1px solid var(--line);
-  display:grid;grid-template-columns:repeat(6,1fr);padding:6px max(6px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(6px,env(safe-area-inset-left,0px))}
-nav.tabs button{background:none;border:0;color:var(--faint);display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10.5px;font-weight:600;padding:6px 0;cursor:pointer;position:relative}
+  display:grid;grid-template-columns:repeat(5,1fr);padding:6px max(6px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(6px,env(safe-area-inset-left,0px))}
+nav.tabs button{background:none;border:0;color:var(--faint);display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:600;padding:6px 0;cursor:pointer;position:relative}
 nav.tabs button svg{width:22px;height:22px}
 nav.tabs button.on{color:var(--brass)}
 nav.tabs .badge{position:absolute;top:2px;left:calc(50% + 6px);background:var(--brass);color:#03120a;border-radius:999px;font-size:10px;min-width:16px;height:16px;line-height:16px;padding:0 4px}
@@ -221,13 +221,6 @@ nav.tabs .badge{background:var(--lantern);color:#1d1203;box-shadow:0 0 10px rgba
   </section>
 
   <!-- JOURNAL -->
-  <section class="view" id="v-journal">
-    <div class="card">
-      <div class="row" style="justify-content:space-between"><h2>Journal</h2><button class="btn ghost" id="btn-add-j">Ajouter</button></div>
-      <div class="list" id="journal"></div>
-      <p class="note">Je le complète à partir de tes exports. La saisie ici sert de dépannage.</p>
-    </div>
-  </section>
 
   <!-- FISCALITE -->
   <section class="view" id="v-trade">
@@ -272,6 +265,11 @@ nav.tabs .badge{background:var(--lantern);color:#1d1203;box-shadow:0 0 10px rgba
       <p class="note" id="sim-note">Basé sur la valeur actuelle du portefeuille et la formule du formulaire 2086.</p>
     </div>
     <div class="card">
+      <div class="row" style="justify-content:space-between"><h2>Journal</h2><button class="btn ghost" id="btn-add-j">Ajouter</button></div>
+      <div class="list" id="journal"></div>
+      <p class="note">Je le complète à partir de tes exports. La saisie ici sert de dépannage.</p>
+    </div>
+    <div class="card">
       <h2>Historique</h2>
       <div class="tw">
         <table class="pos">
@@ -288,8 +286,7 @@ nav.tabs .badge{background:var(--lantern);color:#1d1203;box-shadow:0 0 10px rgba
   <button data-v="v-home" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Accueil</button>
   <button data-v="v-pos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Positions</button>
   <button data-v="v-ideas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg>Idées<span class="badge" id="idea-badge" hidden></span></button>
-  <button data-v="v-journal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8M8 13h6"/></svg>Journal</button>
-  <button data-v="v-trade"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-5-9V3"/><path d="M7.5 15h9"/></svg>Trade</button>
+  <button data-v="v-trade"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-5-9V3"/><path d="M7.5 15h9"/></svg>Fictif</button>
   <button data-v="v-fisc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>Fiscal</button>
 </nav>
 
