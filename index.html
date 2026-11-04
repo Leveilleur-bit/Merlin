@@ -345,10 +345,10 @@ var DKEY='merlin_data',PKEY='merlin_prices',GKEY='merlin_gh';
 var EMPTY={version:1,reglages:{taux_impot:0.30,u:0},fiscal:{acquisitions:[],cessions:[]},positions:[],idees:[],journal:[],historique:[],historique_long:[],deleted:{}};
 var D=lsGet(DKEY,null)||JSON.parse(JSON.stringify(EMPTY));
 var PR=lsGet(PKEY,{ts:0,p:{}});
-function norm(d){d=d||{};var e=JSON.parse(JSON.stringify(EMPTY));
+function norm(d){d=d||{};var e=Object.assign(JSON.parse(JSON.stringify(EMPTY)),JSON.parse(JSON.stringify(d)));/* conserve les champs inconnus */
   ['positions','idees','journal','historique','historique_long'].forEach(function(k){e[k]=Array.isArray(d[k])?d[k]:[];});if(d.historique_long_source)e.historique_long_source=d.historique_long_source;
   e.fiscal.acquisitions=(d.fiscal&&d.fiscal.acquisitions)||[];e.fiscal.cessions=(d.fiscal&&d.fiscal.cessions)||[];
-  e.reglages=Object.assign(e.reglages,d.reglages||{});e.deleted=d.deleted||{};e.version=d.version||1;e.maj=d.maj;return e;}
+  e.reglages=Object.assign({taux_impot:0.30,u:0},d.reglages||{});e.deleted=d.deleted||{};e.version=d.version||1;e.maj=d.maj;return e;}
 D=norm(D);
 function save(push){D.maj=today();lsSet(DKEY,D);if(push!==false)schedulePush();renderAll();}
 function del(arr,id){D.deleted[id]=Date.now();return arr.filter(function(x){return x.id!==id;});}
@@ -407,12 +407,12 @@ function renderHome(){
   $('compo').innerHTML=rs.map(function(r){return'<div class="bar"><span>'+esc(r.p.actif)+'</span><span class="num">'+eur(r.val)+' <span class="faint">· '+Math.round(r.val/t*100)+' %</span></span><span class="t"><i style="width:'+(r.val/mx*100)+'%"></i></span></div>';}).join('')||'<div class="empty">Aucune position. Connecte GitHub dans les réglages.</div>';
   renderEvo();
 }
-var evDays=0,evPts=[];
+var evDays=0,evPts=[],HKEY='merlin_hl',HL=lsGet(HKEY,{points:[],source:''});
 function netInvestedAt(date){var v=0;D.fiscal.acquisitions.forEach(function(a){if(a.date<=date)v+= +a.montant_eur;});D.fiscal.cessions.forEach(function(c){if(c.date<=date)v-= +c.montant_eur;});return v;}
 function evoSeries(){
   var daily=D.historique.slice().sort(function(a,b){return a.date<b.date?-1:1;});
   var first=daily.length?daily[0].date:'9999';
-  var L=D.historique_long.filter(function(g){return g.date<first;}).sort(function(a,b){return a.date<b.date?-1:1;});
+  var L=(HL.points||[]).filter(function(g){return g.date<first;}).sort(function(a,b){return a.date<b.date?-1:1;});
   /* Recalage : les gains Crypto.com sont mis à l'échelle pour rejoindre la première valeur réelle de Merlin */
   var k=1;if(L.length&&daily.length){var gl=L[L.length-1].gain_eur,target=daily[0].valeur_eur-netInvestedAt(daily[0].date);if(gl>0&&target>0)k=target/gl;if(k<0.7||k>1.3)k=1;}
   var pts=L.map(function(g){var n=netInvestedAt(g.date);return{date:g.date,val:Math.max(0,g.gain_eur*k+n),mise:n};});
@@ -601,12 +601,18 @@ function merge(loc,rem){
   rem=norm(rem);Object.keys(rem.deleted).forEach(function(k){loc.deleted[k]=Math.max(loc.deleted[k]||0,rem.deleted[k]);});D.deleted=loc.deleted;
   var o=norm(loc);['positions','idees','journal','historique','historique_long'].forEach(function(k){o[k]=mergeArr(loc[k],rem[k]);});
   o.fiscal.acquisitions=mergeArr(loc.fiscal.acquisitions,rem.fiscal.acquisitions);o.fiscal.cessions=mergeArr(loc.fiscal.cessions,rem.fiscal.cessions);
-  o.reglages=(rem.reglages.u||0)>(loc.reglages.u||0)?rem.reglages:loc.reglages;o.deleted=loc.deleted;return o;}
+  o.reglages=(rem.reglages.u||0)>(loc.reglages.u||0)?rem.reglages:loc.reglages;o.deleted=loc.deleted;
+  Object.keys(rem).forEach(function(k){if(!(k in o))o[k]=rem[k];});return o;}
 function ghPull(silent){
   if(!gh.token)return Promise.resolve();
   if(!silent){$('sync-status').textContent='↻ Synchro…';$('sync-status').style.color='var(--warn)';}
-  return ghFetch().then(function(r){D=merge(D,r.data);gh.sha=r.sha;lsSet(DKEY,D);done();renderAll();refreshPrices();
+  return ghFetch().then(function(r){D=merge(D,r.data);gh.sha=r.sha;lsSet(DKEY,D);done();renderAll();refreshPrices();ghFetchHL();
     if(JSON.stringify(norm(r.data))!==JSON.stringify(D))schedulePush(500);}).catch(fail);
+}
+function ghFetchHL(){
+  if(!gh.token)return;
+  fetch('https://api.github.com/repos/'+GH.owner+'/'+GH.repo+'/contents/historique_long.json?ref='+GH.branch+'&t='+Date.now(),{headers:ghH(),cache:'no-store'})
+  .then(function(r){if(!r.ok)throw 0;return r.json();}).then(function(j){HL=JSON.parse(b64d(j.content));lsSet(HKEY,HL);renderEvo();}).catch(function(){});
 }
 function ghSilentPull(){if(!pushing&&gh.state!=='bad')ghPull(true);}
 function done(){gh.last=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});if(gh.state!=='ok')gh.state='ok';gh.err=null;ghSave();paintState();}
@@ -711,7 +717,11 @@ loadMarkets();
 setInterval(function(){if(!document.hidden)refreshPrices();},120000);
 setInterval(function(){if(!document.hidden)ghSilentPull();},15*60000);
 document.addEventListener('visibilitychange',function(){if(!document.hidden){refreshPrices();ghSilentPull();}});
-if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(function(){});
+if('serviceWorker' in navigator){
+  var hadCtl=!!navigator.serviceWorker.controller,reloaded=false;
+  navigator.serviceWorker.addEventListener('controllerchange',function(){if(hadCtl&&!reloaded){reloaded=true;location.reload();}});
+  navigator.serviceWorker.register('sw.js').then(function(reg){reg.update();}).catch(function(){});
+}
 </script>
 </body>
 </html>
