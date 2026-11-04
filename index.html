@@ -35,7 +35,15 @@ header.top{position:sticky;top:0;z-index:5;background:var(--bg);display:flex;ali
   padding:12px max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px));border-bottom:1px solid var(--line)}
 header.top h1{margin:0;font-size:17px;font-weight:700;letter-spacing:.01em;flex:1}
 header.top h1 span{color:var(--brass)}
-.sync{font-size:12px;color:var(--dim)}
+.sync{font-size:12px;color:var(--dim);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:5px 10px;cursor:pointer;white-space:nowrap}
+.conn{border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:4px;font-size:14px;line-height:1.45;border:1px solid var(--line);background:var(--panel2)}
+.conn.ok{border-color:rgba(76,195,138,.5);background:rgba(76,195,138,.08)} .conn.bad{border-color:rgba(240,113,103,.55);background:rgba(240,113,103,.08)}
+.conn b{font-size:15px}
+.banner{display:flex;gap:10px;align-items:center;justify-content:space-between;border:1px solid rgba(240,113,103,.55);background:rgba(240,113,103,.08);border-radius:var(--r);padding:12px 14px;font-size:14px;line-height:1.4}
+details.zone{border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+details.zone summary{cursor:pointer;color:var(--dim);font-size:14px}
+details.zone[open] summary{margin-bottom:10px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
 .icon-btn{background:var(--panel);border:1px solid var(--line);border-radius:10px;width:36px;height:36px;display:grid;place-items:center;cursor:pointer}
 .icon-btn:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
 main{padding:16px max(16px,env(safe-area-inset-right,0px)) 24px max(16px,env(safe-area-inset-left,0px));max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
@@ -99,7 +107,7 @@ dialog h3{margin:0;font-size:17px}
 <body>
 <header class="top">
   <h1>Merlin<span>·</span></h1>
-  <span class="sync" id="sync-status">Hors ligne</span>
+  <button type="button" class="sync" id="sync-status" aria-label="État de la connexion GitHub">Hors ligne</button>
   <button class="icon-btn" id="btn-refresh" aria-label="Actualiser les cours" title="Actualiser les cours">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>
   </button>
@@ -111,6 +119,7 @@ dialog h3{margin:0;font-size:17px}
 <main>
   <!-- ACCUEIL -->
   <section class="view on" id="v-home">
+    <div class="banner" id="gh-banner" hidden><span id="gh-banner-txt"></span><button type="button" class="btn ghost" id="gh-banner-btn">Réglages</button></div>
     <div class="card hero">
       <h2>Valeur du portefeuille</h2>
       <div class="big" id="h-total">—</div>
@@ -276,13 +285,22 @@ dialog h3{margin:0;font-size:17px}
 
 <dialog id="dlg-set"><form method="dialog" id="f-set">
   <h3>Réglages</h3>
-  <p class="note">Les données sont dans le dépôt privé <b>Leveilleur-bit/Merlin-donnees</b> (fichier data.json). Colle un token GitHub à accès fin, limité à ce dépôt, avec la permission « Contents : read and write ».</p>
-  <label class="f">Token GitHub<input id="s-token" type="password" autocomplete="off" placeholder="github_pat_…"></label>
-  <div class="row"><button type="button" class="btn" id="s-save">Connecter</button><button type="button" class="btn ghost" id="s-pull">Recharger depuis GitHub</button></div>
+  <div class="conn" id="s-state"></div>
+  <div class="row" id="s-actions"><button type="button" class="btn" id="s-check">Vérifier la connexion</button><button type="button" class="btn ghost" id="s-pull">Recharger depuis GitHub</button><button type="button" class="btn ghost" id="s-change">Changer de token</button></div>
+  <div id="s-connect" style="display:flex;flex-direction:column;gap:10px">
+    <p class="note">Les données sont dans le dépôt privé <b>Leveilleur-bit/Merlin-donnees</b>. Colle un token GitHub à accès fin, limité à ce dépôt, avec la permission « Contents : Read and write ». Il n'est enregistré qu'après vérification complète (lecture et écriture).</p>
+    <label class="f">Nouveau token<input id="s-token" type="password" autocomplete="off" placeholder="github_pat_…"></label>
+    <div class="row"><button type="button" class="btn" id="s-save">Vérifier et connecter</button><button type="button" class="btn ghost" id="s-cancel">Annuler</button></div>
+  </div>
   <label class="f">Taux d'imposition<input id="s-taux" type="number" step="0.001" min="0" max="1"></label>
   <div class="row"><button type="button" class="btn ghost" id="s-export">Exporter (JSON)</button>
     <label class="btn ghost" style="cursor:pointer">Importer<input type="file" id="s-import" accept="application/json" hidden></label></div>
-  <div class="row" style="justify-content:space-between"><button type="button" class="btn danger" id="s-forget">Oublier le token</button><button type="button" class="btn ghost" data-close>Fermer</button></div>
+  <details class="zone" id="s-zone"><summary>Déconnecter cet appareil</summary>
+    <p class="note">Le token sera effacé de cet appareil et la synchro s'arrêtera. Tes données restent dans GitHub. Pour confirmer, tape <b>DECONNECTER</b>.</p>
+    <label class="f">Confirmation<input id="s-confirm" autocomplete="off" autocapitalize="characters"></label>
+    <button type="button" class="btn danger" id="s-forget" disabled>Effacer le token de cet appareil</button>
+  </details>
+  <div class="row" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close>Fermer</button></div>
 </form></dialog>
 
 <script>
@@ -487,18 +505,42 @@ function applyJ(j){
 
 /* ---------- synchro GitHub (dépôt privé) ---------- */
 var GH={owner:'Leveilleur-bit',repo:'Merlin-donnees',file:'data.json',branch:'main'};
-var gh=lsGet(GKEY,{token:null,sha:null,last:null});
+var gh=Object.assign({token:null,sha:null,last:null,state:null,err:null,checked:null},lsGet(GKEY,{}));
 var pushTimer=null,pushing=false;
+function ghSave(){lsSet(GKEY,gh);}
 function ghUrl(){return'https://api.github.com/repos/'+GH.owner+'/'+GH.repo+'/contents/'+GH.file;}
-function ghH(){return{'Authorization':'Bearer '+gh.token,'Accept':'application/vnd.github+json','Content-Type':'application/json'};}
-function st(t,c){var e=$('sync-status');e.textContent=t;e.style.color=c||'';}
+function hdr(t){return{'Authorization':'Bearer '+t,'Accept':'application/vnd.github+json','Content-Type':'application/json'};}
+function ghH(){return hdr(gh.token);}
 function b64e(s){return btoa(unescape(encodeURIComponent(s)));}
 function b64d(s){return decodeURIComponent(escape(atob(s.replace(/\n/g,''))));}
-function ghFetch(){
-  return fetch(ghUrl()+'?ref='+GH.branch+'&t='+Date.now(),{headers:ghH(),cache:'no-store'}).then(function(r){
-    if(r.status===404)return{data:null,sha:null};
+var ERR={'401':'Token invalide ou expiré','403':'Token sans permission d’écriture sur Merlin-donnees','404':'Token sans accès au dépôt Merlin-donnees',net:'Hors ligne, synchro en attente',conflit:'Conflit de synchro, réessai au prochain changement'};
+/* état : ok | bad (token refusé, synchro arrêtée) | off (réseau) | none */
+function setState(k,err){gh.state=k;gh.err=err||null;if(k==='ok')gh.checked=Date.now();ghSave();paintState();}
+function paintState(){
+  var e=$('sync-status');
+  if(!gh.token){e.textContent='Non connecté';e.style.color='var(--faint)';}
+  else if(gh.state==='bad'){e.textContent='⚠ Token refusé';e.style.color='var(--down)';}
+  else if(gh.state==='off'){e.textContent='Hors ligne';e.style.color='var(--warn)';}
+  else{e.textContent='✓ '+(gh.last||'Connecté');e.style.color='var(--up)';}
+  var bn=$('gh-banner');
+  if(!gh.token){bn.hidden=false;$('gh-banner-txt').textContent='Pas connecté à GitHub : tes données ne sont pas sauvegardées ni synchronisées.';}
+  else if(gh.state==='bad'){bn.hidden=false;$('gh-banner-txt').textContent='Synchro arrêtée : '+(ERR[gh.err]||'token refusé')+'. Tes modifications restent sur cet appareil.';}
+  else bn.hidden=true;
+  var sb=$('s-state');if(!sb)return;
+  var since=gh.checked?new Date(gh.checked).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
+  if(!gh.token){sb.className='conn bad';sb.innerHTML='<b>Non connecté</b><span>Colle un token ci-dessous pour sauvegarder et synchroniser tes données.</span>';}
+  else if(gh.state==='bad'){sb.className='conn bad';sb.innerHTML='<b>Token refusé</b><span>'+esc(ERR[gh.err]||gh.err||'')+'. Le token est conservé : vérifie-le sur GitHub ou remplace-le.</span>';}
+  else{sb.className='conn ok';sb.innerHTML='<b>✓ Connecté à Merlin-donnees</b><span>Lecture et écriture vérifiées le '+esc(since)+'.<br>Dernière synchro : '+esc(gh.last||'—')+(gh.state==='off'?' (hors ligne pour l’instant)':'')+'.</span>';}
+  var connected=!!gh.token;
+  $('s-actions').hidden=!connected;$('s-zone').hidden=!connected;
+  $('s-connect').style.display=(!connected||changing)?'flex':'none';$('s-cancel').hidden=!connected;
+}
+function fail(e){var m=String(e&&e.message||e);
+  if(m==='401'||m==='403'||m==='404')setState('bad',m);else setState('off','net');}
+function ghFetch(tok){
+  return fetch(ghUrl()+'?ref='+GH.branch+'&t='+Date.now(),{headers:hdr(tok||gh.token),cache:'no-store'}).then(function(r){
     if(!r.ok)throw new Error(String(r.status));
-    return r.json().then(function(j){return{data:JSON.parse(b64d(j.content)),sha:j.sha};});});
+    return r.json().then(function(j){return{data:JSON.parse(b64d(j.content)),sha:j.sha};});},function(){throw new Error('net');});
 }
 function mergeArr(a,b){var m={};(b||[]).concat(a||[]).forEach(function(x){if(!x||!x.id)return;var o=m[x.id];if(!o||(x.u||0)>(o.u||0))m[x.id]=x;});
   return Object.keys(m).map(function(k){return m[k];}).filter(function(x){return!D.deleted[x.id];});}
@@ -509,37 +551,63 @@ function merge(loc,rem){
   o.reglages=(rem.reglages.u||0)>(loc.reglages.u||0)?rem.reglages:loc.reglages;o.deleted=loc.deleted;return o;}
 function ghPull(silent){
   if(!gh.token)return Promise.resolve();
-  if(!silent)st('↻ Synchro…','var(--warn)');
-  return ghFetch().then(function(r){if(r.data){D=merge(D,r.data);}gh.sha=r.sha;lsSet(DKEY,D);done();renderAll();refreshPrices();
-    if(!r.data||JSON.stringify(norm(r.data))!==JSON.stringify(D))schedulePush(500);})
-  .catch(function(e){st(e.message==='401'||e.message==='403'?'Token refusé':'Hors ligne','var(--down)');});
+  if(!silent){$('sync-status').textContent='↻ Synchro…';$('sync-status').style.color='var(--warn)';}
+  return ghFetch().then(function(r){D=merge(D,r.data);gh.sha=r.sha;lsSet(DKEY,D);done();renderAll();refreshPrices();
+    if(JSON.stringify(norm(r.data))!==JSON.stringify(D))schedulePush(500);}).catch(fail);
 }
-function ghSilentPull(){if(!pushing)ghPull(true);}
-function done(){gh.last=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});lsSet(GKEY,gh);st('✓ '+gh.last,'var(--up)');}
-function schedulePush(ms){if(!gh.token)return;clearTimeout(pushTimer);pushTimer=setTimeout(ghPush,ms||2500);st('● Modifié','var(--warn)');}
+function ghSilentPull(){if(!pushing&&gh.state!=='bad')ghPull(true);}
+function done(){gh.last=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});if(gh.state!=='ok')gh.state='ok';gh.err=null;ghSave();paintState();}
+function schedulePush(ms){if(!gh.token||gh.state==='bad')return;clearTimeout(pushTimer);pushTimer=setTimeout(ghPush,ms||2500);var e=$('sync-status');e.textContent='● Modifié';e.style.color='var(--warn)';}
+function putData(tok,sha,msg){var body={message:msg,content:b64e(JSON.stringify(D,null,1)),branch:GH.branch};if(sha)body.sha=sha;
+  return fetch(ghUrl(),{method:'PUT',headers:hdr(tok),body:JSON.stringify(body)}).then(function(r){
+    if(r.status===409||r.status===422)throw new Error('conflit');if(!r.ok)throw new Error(String(r.status));return r.json();},function(e){if(e.message==='conflit'||/^\d+$/.test(e.message))throw e;throw new Error('net');});}
 function ghPush(retry){
-  if(!gh.token||pushing)return;pushing=true;
-  var body={message:'Mise à jour depuis l\'appli',content:b64e(JSON.stringify(D,null,1)),branch:GH.branch};if(gh.sha)body.sha=gh.sha;
-  fetch(ghUrl(),{method:'PUT',headers:ghH(),body:JSON.stringify(body)}).then(function(r){
-    if(r.status===409||r.status===422){pushing=false;if(retry)throw new Error('conflit');return ghFetch().then(function(x){if(x.data)D=merge(D,x.data);gh.sha=x.sha;lsSet(DKEY,D);renderAll();ghPush(true);});}
-    if(!r.ok)throw new Error(String(r.status));
-    return r.json().then(function(j){gh.sha=j.content.sha;pushing=false;done();});})
-  .catch(function(e){pushing=false;st(e.message==='401'||e.message==='403'?'Token refusé':'Envoi en attente','var(--down)');});
+  if(!gh.token||pushing||gh.state==='bad')return;pushing=true;
+  putData(gh.token,gh.sha,'Mise à jour depuis l’appli').then(function(j){gh.sha=j.content.sha;pushing=false;done();})
+  .catch(function(e){pushing=false;
+    if(e.message==='conflit'&&!retry){return ghFetch().then(function(x){D=merge(D,x.data);gh.sha=x.sha;lsSet(DKEY,D);renderAll();ghPush(true);}).catch(fail);}
+    fail(e);});
+}
+/* Vérification complète d'un token : lecture de data.json puis écriture (fusion) avant de l'enregistrer */
+function verifyToken(tok){
+  return ghFetch(tok).then(function(r){D=merge(D,r.data);lsSet(DKEY,D);
+    return putData(tok,r.sha,'Connexion de l’appareil');}).then(function(j){return j.content.sha;});
 }
 
 /* ---------- réglages ---------- */
-$('btn-settings').addEventListener('click',function(){$('s-token').value='';$('s-taux').value=D.reglages.taux_impot;$('dlg-set').showModal();});
-$('s-save').addEventListener('click',function(){var t=$('s-token').value.trim();if(!t){toast('Colle ton token');return;}gh.token=t;gh.sha=null;lsSet(GKEY,gh);
-  ghPull().then(function(){if(gh.sha||D.positions.length){toast('GitHub connecté');$('dlg-set').close();}});});
+var changing=false;
+function openSettings(){changing=false;$('s-token').value='';$('s-confirm').value='';$('s-forget').disabled=true;$('s-zone').open=false;$('s-taux').value=D.reglages.taux_impot;paintState();$('dlg-set').showModal();}
+$('btn-settings').addEventListener('click',openSettings);
+$('sync-status').addEventListener('click',openSettings);
+$('gh-banner-btn').addEventListener('click',openSettings);
+$('s-change').addEventListener('click',function(){changing=true;paintState();$('s-token').focus();});
+$('s-cancel').addEventListener('click',function(){changing=false;$('s-token').value='';paintState();});
+$('s-save').addEventListener('click',function(){
+  var t=$('s-token').value.trim();if(!t){toast('Colle ton token');return;}
+  var b=$('s-save');b.disabled=true;b.textContent='Vérification…';
+  verifyToken(t).then(function(sha){
+    gh.token=t;gh.sha=sha;changing=false;$('s-token').value='';setState('ok');done();renderAll();refreshPrices();toast('Connecté : lecture et écriture OK');
+  }).catch(function(e){var m=String(e.message);
+    toast(m==='net'?'Pas de réseau, réessaie':(ERR[m]||'Échec : '+m)+(gh.token?'. L’ancien token est conservé.':''));
+  }).finally(function(){b.disabled=false;b.textContent='Vérifier et connecter';});
+});
+$('s-check').addEventListener('click',function(){
+  var b=$('s-check');b.disabled=true;b.textContent='Vérification…';
+  verifyToken(gh.token).then(function(sha){gh.sha=sha;setState('ok');done();renderAll();toast('Connexion vérifiée : lecture et écriture OK');})
+  .catch(function(e){fail(e);toast(ERR[e.message]||'Échec');}).finally(function(){b.disabled=false;b.textContent='Vérifier la connexion';});
+});
 $('s-pull').addEventListener('click',function(){ghPull();});
 $('s-taux').addEventListener('change',function(){var v=parseFloat($('s-taux').value);if(v>=0&&v<=1){D.reglages.taux_impot=v;D.reglages.u=Date.now();save();}});
-$('s-forget').addEventListener('click',function(){gh={token:null,sha:null,last:null};lsSet(GKEY,gh);st('Hors ligne','');toast('Token oublié sur cet appareil');});
+$('s-confirm').addEventListener('input',function(){$('s-forget').disabled=$('s-confirm').value.trim().toUpperCase()!=='DECONNECTER';});
+$('s-forget').addEventListener('click',function(){if($('s-confirm').value.trim().toUpperCase()!=='DECONNECTER')return;
+  gh={token:null,sha:null,last:null,state:null,err:null,checked:null};ghSave();paintState();$('s-zone').open=false;toast('Token effacé de cet appareil');});
 $('s-export').addEventListener('click',function(){var b=new Blob([JSON.stringify(D,null,1)],{type:'application/json'});var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='merlin-'+today()+'.json';a.click();setTimeout(function(){URL.revokeObjectURL(a.href);},2000);});
 $('s-import').addEventListener('change',function(e){var f=e.target.files[0];if(!f)return;f.text().then(function(t){D=merge(D,JSON.parse(t));save();toast('Données importées');}).catch(function(){toast('Fichier illisible');});});
 
 /* ---------- démarrage ---------- */
 renderAll();
-if(gh.token){st(gh.last?'✓ '+gh.last:'…','var(--up)');ghPull(true);}else{st('Non connecté','var(--faint)');}
+paintState();if(gh.token)ghPull(true);
+if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(function(){});
 refreshPrices();
 setInterval(function(){if(!document.hidden)refreshPrices();},120000);
 setInterval(function(){if(!document.hidden)ghSilentPull();},15*60000);
