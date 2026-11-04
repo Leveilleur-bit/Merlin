@@ -526,8 +526,8 @@ function renderFisc(){
   var exo=y.cede<=305;
   $('f-pv').textContent=eur(y.pv);$('f-imp').textContent=exo?'0 €':eur(Math.max(0,y.pv)*tx);$('f-pta').textContent=eur(f.pta);
   $('f-note').textContent=exo?'Total cédé sous 305 € : exonéré pour l\'instant.':'À déclarer au printemps '+(+Y+1)+' : formulaire 2086 et case 3AN.';
-  var ks=Object.keys(f.years).sort().reverse();
-  $('f-hist').innerHTML=ks.map(function(k){var v=f.years[k];return'<tr><td>'+k+'</td><td class="num">'+eur(v.achats)+'</td><td class="num">'+eur(v.cede)+'</td><td class="num '+(v.pv>0?'warn':'faint')+'">'+eur(v.pv)+'</td></tr>';}).join('');
+  var y0=Math.min.apply(0,Object.keys(f.years).map(Number).concat([+Y])),ks=[];for(var yy=+Y;yy>=y0;yy--)ks.push(String(yy));
+  $('f-hist').innerHTML=ks.map(function(k){var v=f.years[k]||{achats:0,cede:0,pv:0};return'<tr><td>'+k+'</td><td class="num">'+eur(v.achats)+'</td><td class="num">'+eur(v.cede)+'</td><td class="num '+(v.pv>0?'warn':'faint')+'">'+eur(v.pv)+'</td></tr>';}).join('');
   sim();
 }
 function sim(){
