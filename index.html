@@ -613,9 +613,11 @@ function ppPx(t){var q=PR.p[t.cg];return q?q.usd:null;}
 function ppPnl(t,px){if(px==null)return null;var r=t.sens==='long'?px/t.entree-1:1-px/t.entree;return Math.max(-t.mise,t.mise*r*(+t.levier||1));}
 function paperCheck(){var ch=false,now=Date.now();
   D.paper_trades.forEach(function(t){var px=ppPx(t);if(px==null)return;var L=t.sens==='long';
+    if(t.statut==='marche'){t.statut='ouvert';t.entree=px;t.ouvert_le=today();t.u=now;ch=true;return;}
     if(t.statut==='attente'){if(L?px<=t.limite:px>=t.limite){t.statut='ouvert';t.entree=t.limite;t.ouvert_le=today();t.u=now;ch=true;}return;}
     if(t.statut!=='ouvert')return;
     var close=function(p,why){t.statut='clos';t.sortie=p;t.raison_cloture=why;t.clos_le=today();t.pnl=ppPnl(t,p);t.u=now;ch=true;};
+    if(t.fermer){close(px,'Manuel');return;}
     if(t.sl!=null&&(L?px<=t.sl:px>=t.sl))close(t.sl,'Stop');
     else if(t.tp!=null&&(L?px>=t.tp:px<=t.tp))close(t.tp,'Objectif');
     else if(ppPnl(t,px)<=-t.mise)close(px,'Liquidé');});
@@ -630,11 +632,11 @@ function renderPaper(){var st=ppStats(),g=st.total-st.cap;
   $('pp-real').textContent=(st.real>=0?'+':'')+usd(st.real);$('pp-real').className='v '+(st.real>=0?'up':'down');
   var O=D.paper_trades.filter(function(t){return t.statut!=='clos';}).sort(function(a,b){return a.u<b.u?1:-1;});
   $('pp-list').innerHTML=O.map(function(t){var px=ppPx(t),p=t.statut==='ouvert'?ppPnl(t,px):null;
-    return'<div class="idea" style="cursor:default"><div class="hd"><b>'+esc(t.actif)+'</b><span class="pill '+(t.sens==='long'?'up':'down')+'">'+(t.sens==='long'?'Long':'Short')+(t.levier>1?' ×'+t.levier:'')+'</span>'+(t.statut==='attente'?'<span class="pill" style="color:var(--warn)">Ordre limite</span>':'')+
+    return'<div class="idea" style="cursor:default"><div class="hd"><b>'+esc(t.actif)+'</b><span class="pill '+(t.sens==='long'?'up':'down')+'">'+(t.sens==='long'?'Long':'Short')+(t.levier>1?' ×'+t.levier:'')+'</span>'+(t.statut==='attente'?'<span class="pill" style="color:var(--warn)">Ordre limite</span>':t.statut==='marche'?'<span class="pill" style="color:var(--warn)">Au marché, en attente</span>':'')+(t.fermer?'<span class="pill" style="color:var(--warn)">Clôture demandée</span>':'')+
       '<span class="num '+(p==null?'faint':p>=0?'up':'down')+'" style="margin-left:auto">'+(p==null?'':(p>=0?'+':'')+usd(p)+' · '+pct(p/t.mise))+'</span></div>'+
-      '<div class="num" style="font-size:13px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 12px"><span class="dim">Mise '+usd(+t.mise)+'</span><span class="dim">Cours '+(px!=null?usd(px):'—')+'</span><span>'+(t.statut==='attente'?'Entrée visée '+usd(t.limite):'Entrée '+usd(t.entree))+'</span><span>'+(t.tp!=null?'<span class="up">TP '+usd(t.tp)+'</span>':'')+(t.sl!=null?' <span class="down">SL '+usd(t.sl)+'</span>':'')+'</span></div>'+
+      '<div class="num" style="font-size:13px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 12px"><span class="dim">Mise '+usd(+t.mise)+'</span><span class="dim">Cours '+(px!=null?usd(px):'—')+'</span><span>'+(t.statut==='attente'?'Entrée visée '+usd(t.limite):t.statut==='marche'?'Entrée au prochain cours':'Entrée '+usd(t.entree))+'</span><span>'+(t.tp!=null?'<span class="up">TP '+usd(t.tp)+'</span>':'')+(t.sl!=null?' <span class="down">SL '+usd(t.sl)+'</span>':'')+'</span></div>'+
       (t.note?'<p>'+esc(t.note)+'</p>':'')+
-      '<div class="row" style="justify-content:flex-end"><button type="button" class="btn ghost" data-pp-close="'+esc(t.id)+'">'+(t.statut==='attente'?'Annuler l\'ordre':'Clôturer au cours')+'</button></div></div>';}).join('')||'<div class="empty">Aucun trade en cours. Lance-toi avec « Nouveau trade » ou depuis une idée.</div>';
+      '<div class="row" style="justify-content:flex-end"><button type="button" class="btn ghost" data-pp-close="'+esc(t.id)+'">'+(t.statut!=='ouvert'?'Annuler l\'ordre':'Clôturer au cours')+'</button></div></div>';}).join('')||'<div class="empty">Aucun trade en cours. Lance-toi avec « Nouveau trade » ou depuis une idée.</div>';
   var C=D.paper_trades.filter(function(t){return t.statut==='clos';}).sort(function(a,b){return(a.clos_le||'')<(b.clos_le||'')?1:-1;});
   $('pp-hist').innerHTML=C.map(function(t){var p=+t.pnl||0;return'<div class="li" style="cursor:default"><span class="d">'+esc(t.clos_le||'')+'</span><span class="m"><b>'+esc(t.actif)+' '+(t.sens==='long'?'long':'short')+(t.levier>1?' ×'+t.levier:'')+'</b><span>'+usd(t.entree)+' → '+usd(t.sortie)+' · '+esc(t.raison_cloture||'')+'</span></span><span class="num '+(p>=0?'up':'down')+'">'+(p>=0?'+':'')+usd(p)+'</span></div>';}).join('')||'<div class="empty">Pas encore de trade clôturé.</div>';
 }
@@ -699,7 +701,7 @@ $('f-pp').addEventListener('submit',function(e){if(e.submitter&&e.submitter.valu
   if(lim!=null){t.statut='attente';t.limite=lim;}else{t.statut='ouvert';t.entree=q.usd;t.ouvert_le=today();}
   D.paper_trades.push(t);save();refreshPrices(true);toast(t.statut==='ouvert'?'Trade ouvert à '+usd(t.entree):'Ordre limite placé');});
 $('pp-list').addEventListener('click',function(e){var b=e.target.closest('[data-pp-close]');if(!b)return;var t=D.paper_trades.find(function(x){return x.id===b.dataset.ppClose;});if(!t)return;
-  if(t.statut==='attente'){D.paper_trades=del(D.paper_trades,t.id);save();return;}
+  if(t.statut==='attente'||t.statut==='marche'){D.paper_trades=del(D.paper_trades,t.id);save();return;}
   var px=ppPx(t);if(px==null){toast('Cours indisponible');return;}t.statut='clos';t.sortie=px;t.raison_cloture='Manuel';t.clos_le=today();t.pnl=ppPnl(t,px);t.u=Date.now();save();});
 var ppResetArm=0;
 $('pp-reset').addEventListener('click',function(){var b=$('pp-reset');if(Date.now()-ppResetArm>4000){ppResetArm=Date.now();b.textContent='Touche encore pour tout effacer';setTimeout(function(){b.textContent='Repartir de zéro';},4000);return;}
