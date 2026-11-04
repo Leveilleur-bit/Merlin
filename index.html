@@ -287,10 +287,17 @@ nav.tabs{border-top-color:rgba(47,174,114,.25)}
   <h3>Idée de trade</h3>
   <div class="grid2">
     <label class="f">Actif<input id="i-actif" required maxlength="20"></label>
-    <label class="f">Sens<select id="i-sens"><option value="achat">Achat</option><option value="vente">Vente</option><option value="surveiller">Surveiller</option></select></label>
-    <label class="f">Prix cible ($)<input id="i-cible" type="number" step="any" inputmode="decimal"></label>
+    <label class="f">Sens<select id="i-sens"><option value="long">Long</option><option value="short">Short</option><option value="achat">Achat</option><option value="vente">Vente</option><option value="surveiller">Surveiller</option></select></label>
     <label class="f">Montant prévu (€)<input id="i-mt" type="number" step="any" inputmode="decimal"></label>
+    <label class="f">Source<input id="i-src" maxlength="60" placeholder="ex. Deep Whale"></label>
   </div>
+  <div id="i-levels" style="display:flex;flex-direction:column;gap:10px">
+    <label class="f">Points d'entrée ($)<input id="i-pe" placeholder="83900 ✓, 88600 ✗"></label>
+    <label class="f">Objectifs TP ($)<input id="i-tp" placeholder="81300 ✓, 54660, 47725"></label>
+    <label class="f">Stop SL ($ ou PE1)<input id="i-sl" placeholder="3292 ou PE1"></label>
+    <p class="note" style="margin:0">Sépare les niveaux par des virgules. Ajoute ✓ (ou ok) quand un niveau est atteint, ✗ (ou x) s'il est annulé.</p>
+  </div>
+  <label class="f" id="i-cible-w">Prix cible ($)<input id="i-cible" type="number" step="any" inputmode="decimal"></label>
   <label class="f">Pourquoi<textarea id="i-raison" maxlength="2000"></textarea></label>
   <label class="f">Statut<select id="i-statut"><option value="a_faire">À faire</option><option value="fait">Faite</option><option value="abandonne">Abandonnée</option></select></label>
   <div class="row" style="justify-content:space-between">
@@ -375,7 +382,9 @@ function del(arr,id){D.deleted[id]=Date.now();return arr.filter(function(x){retu
 
 /* ---------- cours (CoinGecko) ---------- */
 var fetching=false;
-function ids(){return D.positions.map(function(p){return p.cg;}).filter(Boolean).filter(function(v,i,a){return a.indexOf(v)===i;});}
+var CGMAP={BTC:'bitcoin',ETH:'ethereum',SOL:'solana',XRP:'ripple',DOGE:'dogecoin',LINK:'chainlink',ADA:'cardano',AVAX:'avalanche-2',DOT:'polkadot',BNB:'binancecoin',SUI:'sui',ONDO:'ondo-finance',RSR:'reserve-rights-token',CRO:'crypto-com-chain',FET:'fetch-ai',PEPE:'pepe',TON:'the-open-network',LTC:'litecoin',TRX:'tron',NEAR:'near',APT:'aptos',ARB:'arbitrum',OP:'optimism',INJ:'injective-protocol',RENDER:'render-token',TAO:'bittensor',HYPE:'hyperliquid',POPCAT:'popcat',WIF:'dogwifcoin',SHIB:'shiba-inu',UNI:'uniswap',AAVE:'aave',ATOM:'cosmos'};
+function ideaCg(i){if(i.cg)return i.cg;var p=D.positions.find(function(x){return x.actif.toUpperCase()===String(i.actif).toUpperCase()&&x.cg;});return p?p.cg:CGMAP[String(i.actif).toUpperCase()]||'';}
+function ids(){return D.positions.map(function(p){return p.cg;}).concat(D.idees.filter(function(i){return i.statut==='a_faire';}).map(ideaCg)).filter(Boolean).filter(function(v,i,a){return a.indexOf(v)===i;});}
 function refreshPrices(force){
   var list=ids();if(!list.length||fetching)return;
   if(!force&&Date.now()-PR.ts<120000)return;
@@ -499,19 +508,44 @@ function renderPos(){
     '<td class="num">'+eur(r.val)+'<small class="'+(r.ecart==null?'faint':r.ecart>=0?'up':'down')+'" style="display:block;font-size:12px">'+pct(r.ecart)+'</small></td></tr>';}).join('')||'<tr><td colspan="3" class="empty">Aucune position.</td></tr>';
 }
 var ideaFilter='a_faire';
-function ideaHit(i){var p=D.positions.find(function(x){return x.actif.toUpperCase()===String(i.actif).toUpperCase();});var pr=p&&priceOf(p);
-  if(!pr||!i.prix_cible_usd)return{hit:false,pr:pr};var c=+i.prix_cible_usd;
-  return{hit:i.sens==='achat'?pr.usd<=c:i.sens==='vente'?pr.usd>=c:false,pr:pr,dist:pr.usd/c-1};}
+function parseLv(t){return String(t||'').split(/[,;\n]+/).map(function(x){x=x.trim();if(!x)return null;
+  var e=/(✓|✔|ok|\bv\b)$/i.test(x)?'ok':/(✗|✘|\bx\b|annul\S*)$/i.test(x)?'annule':'attente';
+  var n=parseFloat(x.replace(/(✓|✔|✗|✘|ok|annul\S*|\bx\b|\bv\b)/ig,'').replace(/\s/g,'').replace(',','.'));return isNaN(n)?null:{prix:n,etat:e};}).filter(Boolean);}
+function fmtLv(a){return(a||[]).map(function(l){return String(l.prix)+(l.etat==='ok'?' ✓':l.etat==='annule'?' ✗':'');}).join(', ');}
+function idPrice(i){var q=PR.p[ideaCg(i)];return q?{usd:q.usd,eur:q.eur}:null;}
+function slPrice(i){if(i.sl==null||i.sl==='')return null;var m=/^PE\s*(\d)$/i.exec(String(i.sl).trim());if(m){var e=(i.entrees||[])[+m[1]-1];return e?e.prix:null;}var n=parseFloat(String(i.sl).replace(/\s/g,''));return isNaN(n)?null:n;}
+/* niveaux touchés par le cours actuel et encore « en attente » = alertes */
+function ideaHit(i){var pr=idPrice(i);
+  if(i.sens==='long'||i.sens==='short'){var al=[];if(!pr)return{hit:false,pr:null,al:al};var c=pr.usd,sh=i.sens==='short';
+    (i.entrees||[]).forEach(function(l,k){if(l.etat==='attente'&&(sh?c>=l.prix:c<=l.prix))al.push('PE'+(k+1)+' touché');});
+    (i.tps||[]).forEach(function(l,k){if(l.etat==='attente'&&(sh?c<=l.prix:c>=l.prix))al.push('TP'+(k+1)+' atteint');});
+    var sl=slPrice(i);if(sl!=null&&(sh?c>=sl:c<=sl))al.push('Stop touché');
+    return{hit:al.length>0,pr:pr,al:al};}
+  if(!pr||!i.prix_cible_usd)return{hit:false,pr:pr,al:[]};var t=+i.prix_cible_usd;
+  var h=i.sens==='achat'?pr.usd<=t:i.sens==='vente'?pr.usd>=t:false;return{hit:h,pr:pr,dist:pr.usd/t-1,al:h?['Cible atteinte']:[]};}
+function ladder(i,pr){var L=[],sl=slPrice(i);
+  (i.entrees||[]).forEach(function(l,k){L.push({n:'PE'+(k+1),p:l.prix,e:l.etat,c:'var(--fg)'});});
+  (i.tps||[]).forEach(function(l,k){L.push({n:i.tps.length>1||!/i/.test('')?'TP'+(k+1):'TP',p:l.prix,e:l.etat,c:'var(--up)'});});
+  if(sl!=null)L.push({n:'SL',p:sl,e:'attente',c:'var(--down)',sl:String(i.sl)});
+  if(pr)L.push({n:'Cours',p:pr.usd,cur:true});
+  L.sort(function(a,b){return b.p-a.p;});
+  return'<div style="display:flex;flex-direction:column;gap:2px;font-size:13px">'+L.map(function(l){
+    if(l.cur)return'<div class="num" style="display:flex;gap:8px;align-items:center;color:var(--brass);font-weight:600"><span style="flex:0 0 64px;white-space:nowrap">▶ Cours</span><span>'+usd(l.p)+'</span><span style="flex:1;border-top:1px dashed var(--brass);opacity:.6"></span></div>';
+    var st=l.e==='ok'?'<span class="up">✓</span>':l.e==='annule'?'<span class="faint">annulé</span>':'';
+    return'<div class="num" style="display:flex;gap:8px;align-items:center;'+(l.e==='annule'?'text-decoration:line-through;opacity:.5':'')+'"><span style="flex:0 0 64px;white-space:nowrap;color:'+l.c+'">'+l.n+'</span><span>'+usd(l.p)+(l.sl&&/PE/i.test(l.sl)?' <span class="faint">('+esc(l.sl)+')</span>':'')+'</span>'+st+'</div>';}).join('')+'</div>';}
 function renderIdeas(){
   document.querySelectorAll('#idea-filter button').forEach(function(b){b.className='btn '+(b.dataset.f===ideaFilter?'':'ghost');});
   var L=D.idees.filter(function(i){return i.statut===ideaFilter;}).sort(function(a,b){return a.date<b.date?1:-1;});
   var n=0;D.idees.forEach(function(i){if(i.statut==='a_faire'&&ideaHit(i).hit)n++;});
   var bd=$('idea-badge');bd.hidden=!n;bd.textContent=n;
-  var S={achat:['Achat','up'],vente:['Vente','down'],surveiller:['Surveiller','dim']};
-  $('ideas').innerHTML=L.map(function(i){var h=ideaHit(i),s=S[i.sens]||S.surveiller;
-    var line=h.pr?('Cours '+usd(h.pr.usd)+(i.prix_cible_usd?' · cible '+usd(+i.prix_cible_usd)+' ('+pct(h.dist)+')':'')):(i.prix_cible_usd?'Cible '+usd(+i.prix_cible_usd):'');
-    return'<div class="idea'+(h.hit?' hit':'')+'" data-id="'+esc(i.id)+'" tabindex="0"><div class="hd"><b>'+esc(i.actif)+'</b><span class="pill '+s[1]+'">'+s[0]+'</span>'+(h.hit?'<span class="pill" style="color:var(--brass)">Cible atteinte</span>':'')+'<span class="faint num" style="margin-left:auto;font-size:12px">'+esc(i.date||'')+'</span></div>'+
-      (line?'<div class="num" style="font-size:13px">'+line+(i.montant_eur?' · '+eur(+i.montant_eur):'')+'</div>':'')+
+  var S={long:['Long','up'],short:['Short','down'],achat:['Achat','up'],vente:['Vente','down'],surveiller:['Surveiller','dim']};
+  $('ideas').innerHTML=L.map(function(i){var h=ideaHit(i),s=S[i.sens]||S.surveiller,lv=i.sens==='long'||i.sens==='short';
+    var line=lv?'':(h.pr?('Cours '+usd(h.pr.usd)+(i.prix_cible_usd?' · cible '+usd(+i.prix_cible_usd)+' ('+pct(h.dist)+')':'')):(i.prix_cible_usd?'Cible '+usd(+i.prix_cible_usd):''));
+    var alerts=(i.statut==='a_faire'?h.al:[]).map(function(a){return'<span class="pill" style="color:'+(/Stop/.test(a)?'var(--down)':'var(--brass)')+'">'+esc(a)+'</span>';}).join('');
+    return'<div class="idea'+(h.hit&&i.statut==='a_faire'?' hit':'')+'" data-id="'+esc(i.id)+'" tabindex="0"><div class="hd" style="flex-wrap:wrap"><b>'+esc(i.actif)+'</b><span class="pill '+s[1]+'">'+s[0]+'</span>'+alerts+'<span class="faint num" style="margin-left:auto;font-size:12px">'+esc(i.date||'')+'</span></div>'+
+      (i.source?'<div class="faint" style="font-size:12px">'+esc(i.source)+'</div>':'')+
+      (lv?ladder(i,h.pr):'')+
+      (line?'<div class="num" style="font-size:13px">'+line+(i.montant_eur?' · '+eur(+i.montant_eur):'')+'</div>':(lv&&i.montant_eur?'<div class="num faint" style="font-size:13px">Montant prévu '+eur(+i.montant_eur)+'</div>':''))+
       (i.raison?'<p>'+esc(i.raison)+'</p>':'')+'</div>';}).join('')||'<div class="empty">Aucune idée ici.</div>';
 }
 var TJ={achat:'Achat',vente:'Vente',achat_eur:'Achat en €',vente_eur:'Vente en €'};
@@ -565,7 +599,10 @@ $('p-del').addEventListener('click',function(){if(!editPos)return;D.positions=de
 
 /* ---------- idées ---------- */
 var editIdea=null;
-function openIdea(i){editIdea=i;$('i-actif').value=i?i.actif:'';$('i-sens').value=i?i.sens:'achat';$('i-cible').value=i&&i.prix_cible_usd!=null?i.prix_cible_usd:'';
+function syncIdeaForm(){var lv=$('i-sens').value==='long'||$('i-sens').value==='short';$('i-levels').hidden=!lv;$('i-cible-w').hidden=lv;}
+$('i-sens').addEventListener('change',syncIdeaForm);
+function openIdea(i){editIdea=i;$('i-actif').value=i?i.actif:'';$('i-sens').value=i?i.sens:'long';$('i-cible').value=i&&i.prix_cible_usd!=null?i.prix_cible_usd:'';
+  $('i-src').value=i&&i.source||'';$('i-pe').value=i?fmtLv(i.entrees):'';$('i-tp').value=i?fmtLv(i.tps):'';$('i-sl').value=i&&i.sl!=null?i.sl:'';syncIdeaForm();
   $('i-mt').value=i&&i.montant_eur!=null?i.montant_eur:'';$('i-raison').value=i?i.raison||'':'';$('i-statut').value=i?i.statut:'a_faire';$('i-del').hidden=!i;$('dlg-idea').showModal();}
 $('btn-add-idea').addEventListener('click',function(){openIdea(null);});
 $('idea-filter').addEventListener('click',function(e){var b=e.target.closest('button');if(b){ideaFilter=b.dataset.f;renderIdeas();}});
@@ -574,7 +611,8 @@ $('ideas').addEventListener('keydown',function(e){if(e.key==='Enter'){var c=e.ta
 $('f-idea').addEventListener('submit',function(e){if(e.submitter&&e.submitter.value!=='ok')return;
   var o=editIdea||{id:uid(),date:today()};o.actif=$('i-actif').value.trim().toUpperCase();o.sens=$('i-sens').value;
   o.prix_cible_usd=$('i-cible').value===''?null:parseFloat($('i-cible').value);o.montant_eur=$('i-mt').value===''?null:parseFloat($('i-mt').value);
-  o.raison=$('i-raison').value.trim();o.statut=$('i-statut').value;o.u=Date.now();if(!editIdea)D.idees.push(o);save();});
+  o.source=$('i-src').value.trim();o.entrees=parseLv($('i-pe').value);o.tps=parseLv($('i-tp').value);var slv=$('i-sl').value.trim();o.sl=slv===''?null:(/^PE\s*\d$/i.test(slv)?slv.toUpperCase().replace(/\s/g,''):parseFloat(slv.replace(/\s/g,'')));
+  o.raison=$('i-raison').value.trim();o.statut=$('i-statut').value;o.u=Date.now();if(!editIdea)D.idees.push(o);save();refreshPrices(true);});
 $('i-del').addEventListener('click',function(){if(!editIdea)return;D.idees=del(D.idees,editIdea.id);$('dlg-idea').close();save();});
 
 /* ---------- journal ---------- */
