@@ -60,6 +60,16 @@ section.view{display:none;flex-direction:column;gap:16px} section.view.on{displa
 .bar .t{grid-column:1/-1;height:6px;background:var(--panel2);border-radius:4px;overflow:hidden}
 .bar .t i{display:block;height:100%;background:var(--brass);border-radius:4px}
 .spark{width:100%;height:90px;display:block}
+.seg{display:inline-flex;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:2px}
+.seg button{background:none;border:0;color:var(--dim);font-size:12px;font-weight:700;padding:5px 10px;border-radius:7px;cursor:pointer}
+.seg button.on{background:var(--brass);color:#1a1408}
+.mk{display:flex;flex-direction:column;gap:4px;padding:10px 0;border-bottom:1px solid var(--line)}
+.mk:last-child{border-bottom:0;padding-bottom:0}
+.mk .hd{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.mk .hd b{font-size:14px} .mk .hd .v{font-family:var(--mono);font-size:16px;font-weight:600;margin-left:auto}
+.mk .hd .c{font-family:var(--mono);font-size:12px;min-width:56px;text-align:right}
+.mk .rd{font-family:var(--mono);font-size:11px;color:var(--faint);min-height:14px}
+.mk svg{width:100%;height:70px;display:block;touch-action:pan-y}
 table.pos{width:100%;border-collapse:collapse;font-size:14px}
 table.pos th{font-size:11px;color:var(--faint);font-weight:600;text-transform:uppercase;letter-spacing:.06em;text-align:right;padding:6px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
 table.pos th:first-child,table.pos td:first-child{text-align:left}
@@ -138,6 +148,12 @@ dialog h3{margin:0;font-size:17px}
       <h2>Évolution</h2>
       <div id="spark"></div>
       <p class="note">Un point par jour où tu ouvres l'appli.</p>
+    </div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between"><h2>Euro, or et argent</h2>
+        <div class="seg" id="mk-per" role="group" aria-label="Période"><button data-d="30">1 M</button><button data-d="182">6 M</button><button data-d="365" class="on">1 A</button></div></div>
+      <div id="mk"><div class="empty">Chargement des cours…</div></div>
+      <p class="note">Euro/dollar : taux de référence de la BCE. Or et argent : prix d'une once en dollars, d'après les jetons adossés PAXG (or) et KAG (argent). Touche une courbe pour lire une date.</p>
     </div>
     <div class="card">
       <h2>Composition</h2>
@@ -604,11 +620,57 @@ $('s-forget').addEventListener('click',function(){if($('s-confirm').value.trim()
 $('s-export').addEventListener('click',function(){var b=new Blob([JSON.stringify(D,null,1)],{type:'application/json'});var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='merlin-'+today()+'.json';a.click();setTimeout(function(){URL.revokeObjectURL(a.href);},2000);});
 $('s-import').addEventListener('change',function(e){var f=e.target.files[0];if(!f)return;f.text().then(function(t){D=merge(D,JSON.parse(t));save();toast('Données importées');}).catch(function(){toast('Fichier illisible');});});
 
+/* ---------- marchés : euro/dollar, or, argent ---------- */
+var MKEY='merlin_mk',MK=lsGet(MKEY,{ts:0,d:null}),mkDays=365;
+try{var sd=sessionStorage.getItem('merlin_mk_d');if(sd){mkDays=+sd;}}catch(e){}
+function isoDay(t){return new Date(t).toISOString().slice(0,10);}
+function getFx(){var start=isoDay(Date.now()-366*864e5);
+  var u1='https://api.frankfurter.app/'+start+'..?from=EUR&to=USD',u2='https://api.frankfurter.dev/v1/'+start+'..?base=EUR&symbols=USD';
+  var go=function(u){return fetch(u).then(function(r){if(!r.ok)throw 0;return r.json();}).then(function(j){return Object.keys(j.rates).sort().map(function(d){return[d,j.rates[d].USD];});});};
+  return go(u1).catch(function(){return go(u2);});}
+function getCg(id){return fetch('https://api.coingecko.com/api/v3/coins/'+id+'/market_chart?vs_currency=usd&days=365&interval=daily')
+  .then(function(r){if(!r.ok)throw 0;return r.json();}).then(function(j){var m={};j.prices.forEach(function(p){m[isoDay(p[0])]=p[1];});return Object.keys(m).sort().map(function(d){return[d,m[d]];});});}
+function loadMarkets(force){
+  if(!force&&MK.d&&Date.now()-MK.ts<6*3600e3){renderMk();return;}
+  var keep=function(p){return p.catch(function(){return null;});};
+  Promise.all([keep(getFx()),keep(getCg('pax-gold')),keep(getCg('kinesis-silver'))]).then(function(r){
+    var old=MK.d||{};MK={ts:Date.now(),d:{fx:r[0]||old.fx||null,gold:r[1]||old.gold||null,silver:r[2]||old.silver||null}};
+    if(r[0]||r[1]||r[2])lsSet(MKEY,MK);renderMk();});
+}
+var MKS=[{k:'fx',t:'Euro / dollar',f:function(v){return v.toLocaleString('fr-FR',{minimumFractionDigits:4,maximumFractionDigits:4})+' $';}},
+         {k:'gold',t:'Or (once)',f:function(v){return usd(v);}},
+         {k:'silver',t:'Argent (once)',f:function(v){return '$'+v.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});}}];
+var mkPts={};
+function renderMk(){
+  document.querySelectorAll('#mk-per button').forEach(function(b){b.classList.toggle('on',+b.dataset.d===mkDays);});
+  if(!MK.d){$('mk').innerHTML='<div class="empty">Cours indisponibles pour le moment.</div>';return;}
+  var from=isoDay(Date.now()-mkDays*864e5);
+  $('mk').innerHTML=MKS.map(function(m){
+    var all=MK.d[m.k];if(!all||all.length<2)return'<div class="mk"><div class="hd"><b>'+m.t+'</b><span class="v faint">indisponible</span></div></div>';
+    var p=all.filter(function(x){return x[0]>=from;});if(p.length<2)p=all.slice(-2);mkPts[m.k]=p;
+    var W=600,H=70,vs=p.map(function(x){return x[1];}),mn=Math.min.apply(0,vs),mx=Math.max.apply(0,vs),sp=mx-mn||1;
+    var xy=p.map(function(x,i){return[(i/(p.length-1))*(W-4)+2,H-4-((x[1]-mn)/sp)*(H-8)];});
+    var d='M'+xy.map(function(q){return q[0].toFixed(1)+' '+q[1].toFixed(1);}).join(' L');
+    var ch=vs[vs.length-1]/vs[0]-1,col=ch>=0?'#4cc38a':'#f07167';
+    return'<div class="mk" data-k="'+m.k+'"><div class="hd"><b>'+m.t+'</b><span class="v">'+m.f(vs[vs.length-1])+'</span><span class="c '+(ch>=0?'up':'down')+'">'+(ch>=0?'+':'')+(ch*100).toFixed(1).replace('.',',')+' %</span></div>'+
+      '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" role="img" aria-label="'+m.t+' sur la période"><path d="'+d+' L'+(W-2)+' '+H+' L2 '+H+' Z" fill="'+col+'" fill-opacity=".10"/><path d="'+d+'" fill="none" stroke="'+col+'" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/><line class="cur" x1="0" x2="0" y1="0" y2="'+H+'" stroke="#9aa1ab" stroke-width="1" vector-effect="non-scaling-stroke" visibility="hidden"/></svg>'+
+      '<div class="rd">'+esc(p[0][0])+' → '+esc(p[p.length-1][0])+' · min '+m.f(mn)+' · max '+m.f(mx)+'</div></div>';}).join('');
+}
+function mkRead(e){var box=e.target.closest('.mk');if(!box||!box.dataset.k)return;var p=mkPts[box.dataset.k];if(!p)return;
+  var sv=box.querySelector('svg'),rc=sv.getBoundingClientRect(),x=Math.min(Math.max(0,(e.clientX-rc.left)/rc.width),1),i=Math.round(x*(p.length-1));
+  var m=MKS.filter(function(z){return z.k===box.dataset.k;})[0],ln=sv.querySelector('.cur'),X=(i/(p.length-1))*596+2;
+  ln.setAttribute('x1',X);ln.setAttribute('x2',X);ln.setAttribute('visibility','visible');
+  box.querySelector('.rd').textContent=p[i][0]+' · '+m.f(p[i][1]);}
+$('mk').addEventListener('pointermove',mkRead);$('mk').addEventListener('pointerdown',mkRead);
+$('mk').addEventListener('pointerleave',function(){renderMk();});
+$('mk-per').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;mkDays=+b.dataset.d;try{sessionStorage.setItem('merlin_mk_d',mkDays);}catch(x){}renderMk();});
+
 /* ---------- démarrage ---------- */
 renderAll();
 paintState();if(gh.token)ghPull(true);
 if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(function(){});
 refreshPrices();
+loadMarkets();
 setInterval(function(){if(!document.hidden)refreshPrices();},120000);
 setInterval(function(){if(!document.hidden)ghSilentPull();},15*60000);
 document.addEventListener('visibilitychange',function(){if(!document.hidden){refreshPrices();ghSilentPull();}});
