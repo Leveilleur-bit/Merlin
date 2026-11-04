@@ -238,6 +238,12 @@ nav.tabs .badge{background:var(--lantern);color:#1d1203;box-shadow:0 0 10px rgba
       <div class="row"><button class="btn" id="pp-new">Nouveau trade</button></div>
       <p class="note">Les ordres (entrée à cours limite, objectif, stop) sont vérifiés à chaque mise à jour des cours, quand Merlin est ouvert.</p>
     </div>
+    <div class="card">
+      <h2>Score des signaux</h2>
+      <p class="note">Chaque idée long ou short avec une source est suivie toute seule avec une mise fictive de 100 $, sans levier : entrée au premier PE, sortie au premier objectif ou au stop. Ça ne touche pas au portefeuille virtuel.</p>
+      <div class="tw"><table class="pos"><thead><tr><th>Source</th><th>Réussite</th><th>Moy. · total</th></tr></thead><tbody id="sg-body"></tbody></table></div>
+      <div class="list" id="sg-list"></div>
+    </div>
     <div class="card"><h2>En cours</h2><div id="pp-list" style="display:flex;flex-direction:column;gap:10px"></div></div>
     <div class="card"><h2>Historique</h2><div class="list" id="pp-hist"></div>
       <div class="row" style="justify-content:flex-end"><button type="button" class="btn ghost" id="pp-reset">Repartir de zéro</button></div></div>
@@ -270,6 +276,13 @@ nav.tabs .badge{background:var(--lantern);color:#1d1203;box-shadow:0 0 10px rgba
       <div class="row" style="justify-content:space-between"><h2>Journal</h2><button class="btn ghost" id="btn-add-j">Ajouter</button></div>
       <div class="list" id="journal"></div>
       <p class="note">Je le complète à partir de tes exports. La saisie ici sert de dépannage.</p>
+    </div>
+    <div class="card">
+      <h2>Déclaration</h2>
+      <p class="note">Les lignes du formulaire 2086, cession par cession, et le montant à reporter sur ta déclaration de revenus.</p>
+      <div class="row"><label class="f" style="flex:1">Année des cessions<select id="dc-year"></select></label></div>
+      <div id="dc-out"></div>
+      <div class="row"><button type="button" class="btn" id="dc-print">Version imprimable / PDF</button></div>
     </div>
     <div class="card">
       <h2>Historique</h2>
@@ -412,11 +425,11 @@ function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
 
 /* ---------- données ---------- */
 var DKEY='merlin_data',PKEY='merlin_prices',GKEY='merlin_gh';
-var EMPTY={version:1,reglages:{taux_impot:0.30,u:0},fiscal:{acquisitions:[],cessions:[]},positions:[],idees:[],journal:[],historique:[],trading_realise:[],paper_trades:[],deleted:{}};
+var EMPTY={version:1,reglages:{taux_impot:0.30,u:0},fiscal:{acquisitions:[],cessions:[]},positions:[],idees:[],journal:[],historique:[],trading_realise:[],paper_trades:[],signal_tests:[],deleted:{}};
 var D=lsGet(DKEY,null)||JSON.parse(JSON.stringify(EMPTY));
 var PR=lsGet(PKEY,{ts:0,p:{}});
 function norm(d){d=d||{};var e=Object.assign(JSON.parse(JSON.stringify(EMPTY)),JSON.parse(JSON.stringify(d)));/* conserve les champs inconnus */
-  ['positions','idees','journal','historique','trading_realise','paper_trades'].forEach(function(k){e[k]=Array.isArray(d[k])?d[k]:[];});if(d.historique_long_source)e.historique_long_source=d.historique_long_source;
+  ['positions','idees','journal','historique','trading_realise','paper_trades','signal_tests'].forEach(function(k){e[k]=Array.isArray(d[k])?d[k]:[];});if(d.historique_long_source)e.historique_long_source=d.historique_long_source;
   e.fiscal.acquisitions=(d.fiscal&&d.fiscal.acquisitions)||[];e.fiscal.cessions=(d.fiscal&&d.fiscal.cessions)||[];
   e.reglages=Object.assign({taux_impot:0.30,u:0},d.reglages||{});e.deleted=d.deleted||{};e.version=d.version||1;e.maj=d.maj;return e;}
 D=norm(D);
@@ -427,14 +440,14 @@ function del(arr,id){D.deleted[id]=Date.now();return arr.filter(function(x){retu
 var fetching=false;
 var CGMAP={BTC:'bitcoin',ETH:'ethereum',SOL:'solana',XRP:'ripple',DOGE:'dogecoin',LINK:'chainlink',ADA:'cardano',AVAX:'avalanche-2',DOT:'polkadot',BNB:'binancecoin',SUI:'sui',ONDO:'ondo-finance',RSR:'reserve-rights-token',CRO:'crypto-com-chain',FET:'fetch-ai',PEPE:'pepe',TON:'the-open-network',LTC:'litecoin',TRX:'tron',NEAR:'near',APT:'aptos',ARB:'arbitrum',OP:'optimism',INJ:'injective-protocol',RENDER:'render-token',TAO:'bittensor',HYPE:'hyperliquid',POPCAT:'popcat',WIF:'dogwifcoin',SHIB:'shiba-inu',UNI:'uniswap',AAVE:'aave',ATOM:'cosmos'};
 function ideaCg(i){if(i.cg)return i.cg;var p=D.positions.find(function(x){return x.actif.toUpperCase()===String(i.actif).toUpperCase()&&x.cg;});return p?p.cg:CGMAP[String(i.actif).toUpperCase()]||'';}
-function ids(){return D.positions.map(function(p){return p.cg;}).concat(D.idees.filter(function(i){return i.statut==='a_faire';}).map(ideaCg)).concat(D.paper_trades.filter(function(t){return t.statut!=='clos';}).map(function(t){return t.cg;})).filter(Boolean).filter(function(v,i,a){return a.indexOf(v)===i;});}
+function ids(){return D.positions.map(function(p){return p.cg;}).concat(D.idees.filter(function(i){return i.statut==='a_faire';}).map(ideaCg)).concat(D.paper_trades.concat(D.signal_tests).filter(function(t){return t.statut!=='clos';}).map(function(t){return t.cg;})).filter(Boolean).filter(function(v,i,a){return a.indexOf(v)===i;});}
 function refreshPrices(force){
   var list=ids();if(!list.length||fetching)return;
   if(!force&&Date.now()-PR.ts<120000)return;
   fetching=true;
   fetch('https://api.coingecko.com/api/v3/simple/price?ids='+encodeURIComponent(list.join(','))+'&vs_currencies=eur,usd&include_24hr_change=true')
   .then(function(r){if(!r.ok)throw new Error(r.status);return r.json();})
-  .then(function(j){PR={ts:Date.now(),p:j};lsSet(PKEY,PR);paperCheck();snapshot();renderAll();})
+  .then(function(j){PR={ts:Date.now(),p:j};lsSet(PKEY,PR);paperCheck();if(signalsCheck())save();snapshot();renderAll();})
   .catch(function(){toast('Cours indisponibles, affichage des derniers connus');})
   .finally(function(){fetching=false;});
 }
@@ -614,7 +627,64 @@ function sim(){
   $('sim-pv').textContent=eur(pv);$('sim-imp').textContent=eur(imp);$('sim-net').textContent=eur(x-imp);
   $('sim-note').textContent='Environ '+Math.round(pv/x*100)+' % de chaque euro retiré est une plus-value. Portefeuille retenu : '+eur(t)+'.';
 }
-function renderAll(){renderHome();renderPos();renderIdeas();renderJournal();renderFisc();renderPaper();}
+function renderAll(){renderHome();renderPos();renderIdeas();renderJournal();renderFisc();renderPaper();renderSignals();renderDecl();}
+/* ---------- score des signaux ---------- */
+function sgFrom(i,t){var E=i.entrees||[],T=i.tps||[],okE=E.filter(function(l){return l.etat==='ok';})[0],peE=E.filter(function(l){return l.etat==='attente';})[0];
+  t=t||{id:'sig-'+i.id,idee:i.id,mise:100,levier:1};t.source=i.source;t.actif=i.actif;t.cg=ideaCg(i);t.sens=i.sens;t.sl=slPrice(i);
+  var nextTp=T.filter(function(l){return l.etat==='attente';})[0];t.tp=nextTp?nextTp.prix:null;
+  if(t.statut!=='ouvert'&&t.statut!=='clos'){if(okE){t.statut='ouvert';t.entree=okE.prix;}else if(peE){t.statut='attente';t.limite=peE.prix;}else return null;}
+  var hitTp=T.filter(function(l){return l.etat==='ok';})[0];
+  if(t.statut==='ouvert'&&hitTp&&t.statut!=='clos'){t.statut='clos';t.sortie=hitTp.prix;t.raison_cloture='Objectif (source)';t.clos_le=today();t.pnl=ppPnl(t,hitTp.prix);}
+  t.idee_u=i.u;t.u=Date.now();return t;}
+function signalsSync(){var ch=false;
+  D.idees.forEach(function(i){if(!(i.sens==='long'||i.sens==='short')||!i.source)return;
+    var t=D.signal_tests.find(function(x){return x.idee===i.id;});
+    if(!t){var n=sgFrom(i,null);if(n){D.signal_tests.push(n);ch=true;}return;}
+    if(t.statut==='clos')return;
+    if(i.statut==='abandonne'&&t.statut==='attente'){D.signal_tests=del(D.signal_tests,t.id);ch=true;return;}
+    if((i.u||0)>(t.idee_u||0)){sgFrom(i,t);ch=true;}});
+  return ch;}
+function signalsCheck(){var ch=false,now=Date.now();
+  D.signal_tests.forEach(function(t){var q=PR.p[t.cg];if(!q||t.statut==='clos')return;var px=q.usd,L=t.sens==='long';
+    if(t.statut==='attente'){if(L?px<=t.limite:px>=t.limite){t.statut='ouvert';t.entree=t.limite;t.u=now;ch=true;}return;}
+    var close=function(p,w){t.statut='clos';t.sortie=p;t.raison_cloture=w;t.clos_le=today();t.pnl=ppPnl(t,p);t.u=now;ch=true;};
+    if(t.sl!=null&&(L?px<=t.sl:px>=t.sl))close(t.sl,'Stop');else if(t.tp!=null&&(L?px>=t.tp:px<=t.tp))close(t.tp,'Objectif');});
+  return ch;}
+function renderSignals(){var by={};
+  D.signal_tests.forEach(function(t){var k=t.source||'Sans source';by[k]=by[k]||{n:0,w:0,sum:0,open:0,wait:0};var b=by[k];
+    if(t.statut==='clos'){b.n++;var r=(+t.pnl||0)/t.mise;b.sum+=r;if(r>0)b.w++;}else if(t.statut==='ouvert')b.open++;else b.wait++;});
+  var ks=Object.keys(by);
+  $('sg-body').innerHTML=ks.map(function(k){var b=by[k];return'<tr><td><span class="asset">'+esc(k)+'<small>'+b.n+' clos · '+b.open+' en cours · '+b.wait+' en attente</small></span></td><td class="num">'+(b.n?Math.round(b.w/b.n*100)+' %':'—')+'</td><td class="num '+(b.sum>=0?'up':'down')+'">'+(b.n?pct(b.sum/b.n)+'<small class="faint" style="display:block;font-size:12px">'+pct(b.sum)+'</small>':'—')+'</td></tr>';}).join('')||'<tr><td colspan="3" class="empty">Aucun signal suivi pour l\'instant.</td></tr>';
+  var L=D.signal_tests.slice().sort(function(a,b){return(b.u||0)-(a.u||0);}).slice(0,8);
+  $('sg-list').innerHTML=L.map(function(t){var q=PR.p[t.cg],p=t.statut==='clos'?+t.pnl:t.statut==='ouvert'&&q?ppPnl(t,q.usd):null;
+    var st=t.statut==='clos'?esc(t.raison_cloture||'Clos'):t.statut==='ouvert'?'En cours depuis '+usd(t.entree):'Attend '+usd(t.limite);
+    return'<div class="li" style="cursor:default"><span class="d">'+(t.sens==='long'?'Long':'Short')+'</span><span class="m"><b>'+esc(t.actif)+'</b><span>'+st+'</span></span><span class="num '+(p==null?'faint':p>=0?'up':'down')+'">'+(p==null?'—':pct(p/t.mise))+'</span></div>';}).join('');
+}
+/* ---------- déclaration 2086 ---------- */
+function decl(year){var ev=[];D.fiscal.acquisitions.forEach(function(a){ev.push({d:a.date,t:'A',m:+a.montant_eur});});
+  D.fiscal.cessions.forEach(function(c){ev.push({d:c.date,t:'C',m:+c.montant_eur,v:+c.valeur_portefeuille_eur,lib:c.libelle});});
+  ev.sort(function(a,b){return a.d<b.d?-1:a.d>b.d?1:(a.t==='A'?-1:1);});
+  var acq=0,frac=0,L=[];
+  ev.forEach(function(e){if(e.t==='A'){acq+=e.m;return;}var net=acq-frac,f=e.v>0?net*e.m/e.v:0,pv=e.m-f;
+    if(e.d.slice(0,4)===String(year))L.push({date:e.d,lib:e.lib,l212:e.v,l213:e.m,l214:0,l215:e.m,l216:0,l217:e.m,l218:e.m,l220:acq,l221:frac,l222:0,l223:net,l224:pv});frac+=f;});
+  var tot=L.reduce(function(s,x){return s+x.l213;},0),pv=L.reduce(function(s,x){return s+x.l224;},0);
+  return{lines:L,tot:tot,pv:pv,exo:tot<=305};}
+function eur2(v){return Math.round(v).toLocaleString('fr-FR')+' €';}
+var DCL=[['212','Valeur globale du portefeuille au moment de la cession','l212'],['213','Prix de cession','l213'],['214','Frais de cession','l214'],['215','Prix de cession net des frais','l215'],['216','Soulte reçue ou versée','l216'],['217','Prix de cession net des soultes','l217'],['218','Prix de cession net des frais et soultes','l218'],['220','Prix total d\'acquisition','l220'],['221','Fractions de capital initial déjà comprises dans des cessions antérieures','l221'],['222','Soultes reçues lors d\'échanges antérieurs','l222'],['223','Prix total d\'acquisition net','l223'],['224','Plus ou moins-value','l224']];
+function renderDecl(){var sel=$('dc-year');var ys=D.fiscal.cessions.map(function(c){return c.date.slice(0,4);}).filter(function(v,i,a){return a.indexOf(v)===i;}).sort().reverse();
+  var cur=sel.value||ys[0];sel.innerHTML=ys.map(function(y){return'<option'+(y===cur?' selected':'')+'>'+y+'</option>';}).join('');if(!ys.length){$('dc-out').innerHTML='<div class="empty">Aucune cession enregistrée.</div>';return;}
+  var r=decl(sel.value||ys[0]),Y=+(sel.value||ys[0]);
+  $('dc-out').innerHTML='<div class="callout">'+(r.exo?'Total cédé en '+Y+' : '+eur2(r.tot)+', sous le seuil de 305 € : <b>exonéré</b>, rien à reporter.':'À déclarer au printemps '+(Y+1)+' : formulaire 2086 ('+r.lines.length+' cession'+(r.lines.length>1?'s':'')+') puis <b>case '+(r.pv>=0?'3AN : '+eur2(r.pv):'3BN (moins-value) : '+eur2(-r.pv))+'</b> de la déclaration 2042 C. Et le 3916-bis pour chaque compte à l\'étranger (Crypto.com).')+'</div>'+
+    r.lines.map(function(x,k){return'<div class="mk"><div class="hd"><b>Cession '+(k+1)+' · '+esc(x.date)+'</b><span class="faint" style="font-size:12px">'+esc(x.lib||'')+'</span></div>'+
+      DCL.map(function(d){return'<div class="row" style="justify-content:space-between;font-size:13px;flex-wrap:nowrap"><span class="dim" style="min-width:0"><span class="num faint">'+d[0]+'</span> '+d[1]+'</span><span class="num" style="white-space:nowrap'+(d[0]==='224'?';font-weight:700;color:var(--lantern)':'')+'">'+eur2(x[d[2]])+'</span></div>';}).join('')+'</div>';}).join('')+
+    '<p class="note">Frais et soultes à 0. Valeurs du portefeuille estimées par Merlin. Vérifie les numéros de lignes sur le formulaire de l\'année avant de recopier.</p>';}
+$('dc-year').addEventListener('change',renderDecl);
+$('dc-print').addEventListener('click',function(){var y=$('dc-year').value;if(!y)return;var r=decl(y);
+  var h='<!doctype html><meta charset="utf-8"><title>Formulaire 2086 – '+y+'</title><style>body{font:14px/1.45 system-ui,sans-serif;color:#111;margin:24px;max-width:800px}h1{font-size:20px}table{border-collapse:collapse;width:100%;margin:10px 0 22px}td,th{border:1px solid #bbb;padding:5px 8px;text-align:left}td.n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}.b{font-weight:700}.box{border:2px solid #111;padding:10px 12px;margin:14px 0}</style>'+
+    '<h1>Plus-values sur actifs numériques – cessions '+y+'</h1><div class="box">'+(r.exo?'Total cédé '+eur2(r.tot)+' : sous 305 €, exonéré.':'Report sur la 2042 C : <b>case '+(r.pv>=0?'3AN = '+eur2(r.pv):'3BN = '+eur2(-r.pv))+'</b><br>Total des cessions : '+eur2(r.tot)+'<br>Penser au formulaire 3916-bis (comptes d\'actifs numériques à l\'étranger).')+'</div>'+
+    r.lines.map(function(x,k){return'<h2 style="font-size:16px">Cession '+(k+1)+' – '+esc(x.date)+' – '+esc(x.lib||'')+'</h2><table>'+DCL.map(function(d){return'<tr'+(d[0]==='224'?' class="b"':'')+'><td>'+d[0]+'</td><td>'+d[1]+'</td><td class="n">'+eur2(x[d[2]])+'</td></tr>';}).join('')+'</table>';}).join('')+
+    '<p style="font-size:12px;color:#555">Préparé par Merlin. Estimations à vérifier avant déclaration ; frais et soultes à 0.</p><script>setTimeout(function(){print()},300)<\/script>';
+  var w=window.open(URL.createObjectURL(new Blob([h],{type:'text/html'})),'_blank');if(!w)toast('Autorise les fenêtres pour imprimer');});
 /* ---------- portefeuille virtuel ---------- */
 function ppCap(){return +(D.reglages.paper_capital||10000);}
 function ppPx(t){var q=PR.p[t.cg];return q?q.usd:null;}
@@ -688,7 +758,7 @@ $('f-idea').addEventListener('submit',function(e){if(e.submitter&&e.submitter.va
   var o=editIdea||{id:uid(),date:today()};o.actif=$('i-actif').value.trim().toUpperCase();o.sens=$('i-sens').value;
   o.prix_cible_usd=$('i-cible').value===''?null:parseFloat($('i-cible').value);o.montant_eur=$('i-mt').value===''?null:parseFloat($('i-mt').value);
   o.source=$('i-src').value.trim();o.entrees=parseLv($('i-pe').value);o.tps=parseLv($('i-tp').value);var slv=$('i-sl').value.trim();o.sl=slv===''?null:(/^PE\s*\d$/i.test(slv)?slv.toUpperCase().replace(/\s/g,''):parseFloat(slv.replace(/\s/g,'')));
-  o.raison=$('i-raison').value.trim();o.statut=$('i-statut').value;o.u=Date.now();if(!editIdea)D.idees.push(o);save();refreshPrices(true);});
+  o.raison=$('i-raison').value.trim();o.statut=$('i-statut').value;o.u=Date.now();if(!editIdea)D.idees.push(o);signalsSync();save();refreshPrices(true);});
 $('i-del').addEventListener('click',function(){if(!editIdea)return;D.idees=del(D.idees,editIdea.id);$('dlg-idea').close();save();});
 $('i-test').addEventListener('click',function(){var i=editIdea;if(!i)return;$('dlg-idea').close();
   var pe=(i.entrees||[]).filter(function(l){return l.etat==='attente';})[0],tp=(i.tps||[]).filter(function(l){return l.etat==='attente';})[0];
@@ -783,14 +853,14 @@ function mergeArr(a,b){var m={};(b||[]).concat(a||[]).forEach(function(x){if(!x|
   return Object.keys(m).map(function(k){return m[k];}).filter(function(x){return!D.deleted[x.id];});}
 function merge(loc,rem){
   rem=norm(rem);Object.keys(rem.deleted).forEach(function(k){loc.deleted[k]=Math.max(loc.deleted[k]||0,rem.deleted[k]);});D.deleted=loc.deleted;
-  var o=norm(loc);['positions','idees','journal','historique','trading_realise','paper_trades'].forEach(function(k){o[k]=mergeArr(loc[k],rem[k]);});
+  var o=norm(loc);['positions','idees','journal','historique','trading_realise','paper_trades','signal_tests'].forEach(function(k){o[k]=mergeArr(loc[k],rem[k]);});
   o.fiscal.acquisitions=mergeArr(loc.fiscal.acquisitions,rem.fiscal.acquisitions);o.fiscal.cessions=mergeArr(loc.fiscal.cessions,rem.fiscal.cessions);
   o.reglages=(rem.reglages.u||0)>(loc.reglages.u||0)?rem.reglages:loc.reglages;o.deleted=loc.deleted;
   Object.keys(rem).forEach(function(k){if(!(k in o))o[k]=rem[k];});return o;}
 function ghPull(silent){
   if(!gh.token)return Promise.resolve();
   if(!silent){$('sync-status').textContent='↻ Synchro…';$('sync-status').style.color='var(--warn)';}
-  return ghFetch().then(function(r){D=merge(D,r.data);gh.sha=r.sha;lsSet(DKEY,D);done();renderAll();refreshPrices();ghFetchHL();
+  return ghFetch().then(function(r){D=merge(D,r.data);gh.sha=r.sha;if(signalsSync())schedulePush();lsSet(DKEY,D);done();renderAll();refreshPrices();ghFetchHL();
     if(JSON.stringify(norm(r.data))!==JSON.stringify(D))schedulePush(500);}).catch(fail);
 }
 function ghFetchHL(){
@@ -893,6 +963,7 @@ $('mk').addEventListener('pointerleave',function(){renderMk();});
 $('mk-per').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;mkDays=+b.dataset.d;try{sessionStorage.setItem('merlin_mk_d',mkDays);}catch(x){}renderMk();});
 
 /* ---------- démarrage ---------- */
+if(signalsSync())lsSet(DKEY,D);
 renderAll();
 paintState();if(gh.token)ghPull(true);
 if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(function(){});
