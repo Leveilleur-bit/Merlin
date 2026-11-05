@@ -517,7 +517,7 @@ function renderHome(){
   $('compo').innerHTML=rs.map(function(r){return'<div class="bar"><span>'+esc(r.p.actif)+'</span><span class="num">'+eur(r.val)+' <span class="faint">· '+Math.round(r.val/t*100)+' %</span></span><span class="t"><i style="width:'+(r.val/mx*100)+'%"></i></span></div>';}).join('')||'<div class="empty">Aucune position. Connecte GitHub dans les réglages.</div>';
   var pi=pocketStats('investissement'),pt=pocketStats('trading'),tt=pi.val+pt.val||1,ru=realiseUsd();
   $('poches').innerHTML=[['Investissement',pi,'#2fae72',''],['Trading',pt,'#8fe3ae',' · réalisé '+(ru>=0?'+':'')+usd(ru)]].map(function(x){var st=x[1];
-    return'<div class="bar"><span>'+x[0]+' <span class="'+(st.latentPct==null?'faint':st.latentPct>=0?'up':'down')+' num" style="font-size:12px">'+pct(st.latentPct)+'</span><span class="faint" style="font-size:12px">'+x[3]+'</span></span><span class="num">'+eur(st.val)+' <span class="faint">· '+Math.round(st.val/tt*100)+' %</span></span><span class="t"><i style="width:'+(st.val/tt*100)+'%;background:'+x[2]+'"></i></span></div>';}).join('');
+    return'<div class="bar"><span>'+x[0]+'<span class="faint" style="font-size:12px">'+x[3]+'</span></span><span class="num">'+eur(st.val)+' <span class="faint">· '+Math.round(st.val/tt*100)+' %</span></span><span class="t"><i style="width:'+(st.val/tt*100)+'%;background:'+x[2]+'"></i></span></div>';}).join('');
   renderEvo();
 }
 var evDays=0,evPts=[],HKEY='merlin_hl',HL=lsGet(HKEY,{points:[],source:''});
