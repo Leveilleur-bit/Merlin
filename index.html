@@ -777,6 +777,8 @@ $('dc-print').addEventListener('click',function(){var y=$('dc-year').value;if(!y
     '<p style="font-size:12px;color:#555">Préparé par Merlin. Estimations à vérifier avant déclaration ; frais et soultes à 0.</p><script>setTimeout(function(){print()},300)<\/script>';
   var w=window.open(URL.createObjectURL(new Blob([h],{type:'text/html'})),'_blank');if(!w)toast('Autorise les fenêtres pour imprimer');});
 /* ---------- portefeuille virtuel ---------- */
+function ppNumAll(){var mx=0,ch=false;D.paper_trades.forEach(function(t){if(+t.num>mx)mx=+t.num;});
+  D.paper_trades.filter(function(t){return!t.num;}).sort(function(a,b){return(a.u||0)-(b.u||0);}).forEach(function(t){t.num=++mx;t.u=Date.now();ch=true;});return ch;}
 function ppCap(){return +(D.reglages.paper_capital||10000);}
 function ppPx(t){var q=PR.p[t.cg];return q?q.usd:null;}
 function ppRaw(t,px,m){var r=t.sens==='long'?px/t.entree-1:1-px/t.entree;return Math.max(-m,m*r*(+t.levier||1));}
@@ -812,13 +814,13 @@ function renderPaper(){var st=ppStats(),g=st.total-st.cap;
   $('pp-real').textContent=(st.real>=0?'+':'')+usd(st.real);$('pp-real').className='v '+(st.real>=0?'up':'down');
   var O=D.paper_trades.filter(function(t){return t.statut!=='clos';}).sort(function(a,b){return a.u<b.u?1:-1;});
   $('pp-list').innerHTML=O.map(function(t){var px=ppPx(t),p=t.statut==='ouvert'?ppPnl(t,px):null;
-    return'<div class="idea" style="cursor:default"><div class="hd"><b>'+esc(t.actif)+'</b><span class="pill '+(t.sens==='long'?'up':'down')+'">'+(t.sens==='long'?'Long':'Short')+(t.levier>1?' ×'+t.levier:'')+'</span>'+(t.statut==='attente'?'<span class="pill" style="color:var(--warn)">Ordre limite</span>':t.statut==='marche'?'<span class="pill" style="color:var(--warn)">Au marché, en attente</span>':'')+(t.fermer?'<span class="pill" style="color:var(--warn)">Clôture demandée</span>':'')+
+    return'<div class="idea" style="cursor:default"><div class="hd"><span class="num faint">#'+(t.num||'?')+'</span><b>'+esc(t.actif)+'</b><span class="pill '+(t.sens==='long'?'up':'down')+'">'+(t.sens==='long'?'Long':'Short')+(t.levier>1?' ×'+t.levier:'')+'</span>'+(t.statut==='attente'?'<span class="pill" style="color:var(--warn)">Ordre limite</span>':t.statut==='marche'?'<span class="pill" style="color:var(--warn)">Au marché, en attente</span>':'')+(t.fermer?'<span class="pill" style="color:var(--warn)">Clôture demandée</span>':'')+
       '<span class="num '+(p==null?'faint':p>=0?'up':'down')+'" style="margin-left:auto">'+(p==null?'':(p>=0?'+':'')+usd(p)+' · '+pct(p/t.mise))+'</span></div>'+
       '<div class="num" style="font-size:13px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 12px"><span class="dim">Mise '+usd(+t.mise)+'</span><span class="dim">Cours '+(px!=null?usd(px):'—')+'</span><span>'+(t.statut==='attente'?'Entrée visée '+usd(t.limite):t.statut==='marche'?'Entrée au prochain cours':'Entrée '+usd(t.entree))+'</span><span>'+((t.tps||[]).length?(t.tps.map(function(x,k){return'<span class="up" style="display:block;'+(x.etat==='ok'?'opacity:.55':'')+'">TP'+(k+1)+' '+(x.prix!=null?usd(x.prix):'+'+x.pct+' %')+' ('+x.part+' %)'+(x.etat==='ok'?' ✓':'')+'</span>';}).join(' ')+' '):'')+(t.tp!=null?'<span class="up">TP '+usd(t.tp)+'</span>':'')+(t.sl!=null?'<span class="down" style="display:block">SL '+usd(t.sl)+'</span>':t.sl_pct!=null?'<span class="down" style="display:block">SL −'+t.sl_pct+' %</span>':'')+'</span></div>'+
       (t.note?'<p>'+esc(t.note)+'</p>':'')+
       (t.lecon?'<p><span class="faint">Leçon :</span> '+esc(t.lecon)+'</p>':'')+'<div class="row" style="justify-content:flex-end"><button type="button" class="btn ghost" data-cn="'+esc(t.id)+'">Carnet</button><button type="button" class="btn ghost" data-pp-close="'+esc(t.id)+'">'+(t.statut!=='ouvert'?'Annuler l\'ordre':'Clôturer au cours')+'</button></div></div>';}).join('')||'<div class="empty">Aucun trade en cours. Lance-toi avec « Nouveau trade » ou depuis une idée.</div>';
   var C=D.paper_trades.filter(function(t){return t.statut==='clos';}).sort(function(a,b){return(a.clos_le||'')<(b.clos_le||'')?1:-1;});
-  $('pp-hist').innerHTML=C.map(function(t){var p=+t.pnl||0;return'<div class="li" data-cn="'+esc(t.id)+'"><span class="d">'+esc(t.clos_le||'')+'</span><span class="m"><b>'+esc(t.actif)+' '+(t.sens==='long'?'long':'short')+(t.levier>1?' ×'+t.levier:'')+(t.tag?' <span class="pill faint" style="font-size:10px">'+esc(t.tag)+'</span>':'')+'</b><span>'+usd(t.entree)+' → '+usd(t.sortie)+' · '+esc(t.raison_cloture||'')+(t.lecon?' · '+esc(t.lecon):'')+'</span></span><span class="num '+(p>=0?'up':'down')+'">'+(p>=0?'+':'')+usd(p)+'</span></div>';}).join('')||'<div class="empty">Pas encore de trade clôturé.</div>';
+  $('pp-hist').innerHTML=C.map(function(t){var p=+t.pnl||0;return'<div class="li" data-cn="'+esc(t.id)+'"><span class="d">'+esc(t.clos_le||'')+'</span><span class="m"><b><span class="num faint">#'+(t.num||'?')+'</span> '+esc(t.actif)+' '+(t.sens==='long'?'long':'short')+(t.levier>1?' ×'+t.levier:'')+(t.tag?' <span class="pill faint" style="font-size:10px">'+esc(t.tag)+'</span>':'')+'</b><span>'+usd(t.entree)+' → '+usd(t.sortie)+' · '+esc(t.raison_cloture||'')+(t.lecon?' · '+esc(t.lecon):'')+'</span></span><span class="num '+(p>=0?'up':'down')+'">'+(p>=0?'+':'')+usd(p)+'</span></div>';}).join('')||'<div class="empty">Pas encore de trade clôturé.</div>';
 }
 
 /* ---------- navigation ---------- */
@@ -879,7 +881,7 @@ $('f-pp').addEventListener('submit',function(e){if(e.submitter&&e.submitter.valu
   if(lim==null&&!q){e.preventDefault();toast('Cours introuvable pour '+a);return;}
   var t={id:uid(),actif:a,cg:cg,sens:$('pp-sens').value,mise:mise,levier:+$('pp-lev').value,tp:$('pp-tp').value===''?null:parseFloat($('pp-tp').value),sl:$('pp-sl').value===''?null:parseFloat($('pp-sl').value),note:$('pp-note').value.trim(),u:Date.now()};
   if(lim!=null){t.statut='attente';t.limite=lim;}else{t.statut='ouvert';t.entree=q.usd;t.ouvert_le=today();}
-  D.paper_trades.push(t);save();refreshPrices(true);toast(t.statut==='ouvert'?'Trade ouvert à '+usd(t.entree):'Ordre limite placé');});
+  D.paper_trades.push(t);ppNumAll();save();refreshPrices(true);toast(t.statut==='ouvert'?'Trade ouvert à '+usd(t.entree):'Ordre limite placé');});
 $('pp-list').addEventListener('click',function(e){var b=e.target.closest('[data-pp-close]');if(!b)return;var t=D.paper_trades.find(function(x){return x.id===b.dataset.ppClose;});if(!t)return;
   if(t.statut==='attente'||t.statut==='marche'){D.paper_trades=del(D.paper_trades,t.id);save();return;}
   var px=ppPx(t);if(px==null){toast('Cours indisponible');return;}t.statut='clos';t.sortie=px;t.raison_cloture='Manuel';t.clos_le=today();t.pnl=ppPnl(t,px);t.u=Date.now();save();});
@@ -962,7 +964,7 @@ function merge(loc,rem){
 function ghPull(silent){
   if(!gh.token)return Promise.resolve();
   if(!silent){$('sync-status').textContent='↻ Synchro…';$('sync-status').style.color='var(--warn)';}
-  return ghFetch().then(function(r){D=merge(D,r.data);gh.sha=r.sha;if(signalsSync())schedulePush();lsSet(DKEY,D);done();renderAll();refreshPrices();ghFetchHL();
+  return ghFetch().then(function(r){D=merge(D,r.data);gh.sha=r.sha;if(signalsSync()|ppNumAll())schedulePush();lsSet(DKEY,D);done();renderAll();refreshPrices();ghFetchHL();
     if(JSON.stringify(norm(r.data))!==JSON.stringify(D))schedulePush(500);}).catch(fail);
 }
 function ghFetchHL(){
@@ -1065,7 +1067,7 @@ $('mk').addEventListener('pointerleave',function(){renderMk();});
 $('mk-per').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;mkDays=+b.dataset.d;try{sessionStorage.setItem('merlin_mk_d',mkDays);}catch(x){}renderMk();});
 
 /* ---------- démarrage ---------- */
-if(signalsSync())lsSet(DKEY,D);
+if(signalsSync()|ppNumAll())lsSet(DKEY,D);
 renderAll();
 paintState();if(gh.token)ghPull(true);
 if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(function(){});
